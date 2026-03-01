@@ -466,6 +466,14 @@ background-size:28px 28px;min-height:500px;}
         <button class="btn btn-primary btn-sm" id="randomBtn">🔀 隨機入座</button>
         <button class="btn btn-gray btn-sm" id="resetBtn">重置座位</button>
         <button class="btn btn-outline btn-sm" id="screenshotBtn" title="另存座位表圖片">📸 截圖</button>
+        <!-- 電腦教室版面設定（僅在電腦教室模式顯示） -->
+        <div id="computerLayoutBtns" style="display:none;align-items:center;gap:4px;">
+          <span style="font-size:0.68rem;color:#7c3aed;font-weight:700;">版面：</span>
+          <button class="comp-layout-btn active" data-layout="v3" title="縱向3欄×10列（預設）">縱3</button>
+          <button class="comp-layout-btn" data-layout="h3" title="橫向10欄×3列">橫3</button>
+          <button class="comp-layout-btn" data-layout="v4" title="縱向4欄×8列">縱4</button>
+          <button class="comp-layout-btn" data-layout="h4" title="橫向8欄×4列">橫4</button>
+        </div>
       </div>
       <div id="seatingArea">
         <!-- dynamically rendered -->
@@ -886,6 +894,7 @@ class ClassroomApp {
           if (!cls.computerSeats)          cls.computerSeats          = {};
           if (!cls.groupNames)             cls.groupNames             = {};
           if (!cls.scilabGroupNames)       cls.scilabGroupNames       = {};
+          if (!cls.computerLayout)         cls.computerLayout         = 'v3';
           if (!cls.scilabGroupScores)      cls.scilabGroupScores      = {};
           if (!cls.scilabGroupScoreHistory) cls.scilabGroupScoreHistory = {};
           if (!cls.drawnSids)               cls.drawnSids               = [];
@@ -948,6 +957,7 @@ class ClassroomApp {
     return { name, students, normalSeats:{}, groupSeats:{}, examSeats:{}, freeSeats:{},
              scilabSeats:{}, computerSeats:{},
              groupNames:{}, scilabGroupNames:{},
+             computerLayout:'v3',
              scores:{}, scoreHistory:{},
              groupScores:{}, groupScoreHistory:{},
              scilabGroupScores:{}, scilabGroupScoreHistory:{},
@@ -1319,29 +1329,40 @@ class ClassroomApp {
   // 老師視角: 第1列在講台旁，第10列最遠
   // 學生視角: 翻轉，第10列(最遠)在上，第1列(講台旁)在下
   _renderComputer(container) {
-    const sz = Math.min(this.seatSize, 105);
+    const layout = (this._cls.computerLayout || 'v3');
+    // 版面設定
+    const layouts = {
+      v3: { cols:3,  rows:10, label:'列', isVertical:true  },
+      h3: { cols:10, rows:3,  label:'排', isVertical:false },
+      v4: { cols:4,  rows:8,  label:'列', isVertical:true  },
+      h4: { cols:8,  rows:4,  label:'排', isVertical:false },
+    };
+    const cfg = layouts[layout];
+    const sz = Math.min(this.seatSize, cfg.isVertical ? 105 : 85);
+    const sv = this.isStudentView;
+
+    // 學生視角：前後翻（row順序反），左右不翻
+    const rowArr = Array.from({length:cfg.rows},(_,i)=>i);
+    const rowOrder = sv ? [...rowArr].reverse() : rowArr;
+
     const area = document.createElement('div');
     area.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:center;width:100%;';
-
-    // rowOrder: 老師視角 row0(前)在下方→從0渲染到9; 學生視角相反
-    const rowOrder = this.isStudentView ? [9,8,7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7,8,9];
-    // 欄順序：老師視角 col=0(左)→2(右); 學生視角也左→右（不需翻轉，只翻前後）
-    const colOrder = [0,1,2];
 
     rowOrder.forEach(row => {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'display:flex;align-items:center;gap:6px;justify-content:center;';
 
       const lbl = document.createElement('div');
-      lbl.style.cssText = 'font-size:0.68rem;font-weight:700;color:#7c3aed;min-width:32px;text-align:right;background:#f3e8ff;border:1px solid #ddd6fe;border-radius:5px;padding:2px 4px;';
-      lbl.textContent = `第${row+1}列`;
+      lbl.style.cssText = 'font-size:0.65rem;font-weight:700;color:#7c3aed;min-width:30px;text-align:right;background:#f3e8ff;border:1px solid #ddd6fe;border-radius:5px;padding:2px 4px;white-space:nowrap;';
+      lbl.textContent = `第${row+1}${cfg.label}`;
       wrap.appendChild(lbl);
 
       const rowDiv = document.createElement('div');
-      rowDiv.style.cssText = 'display:flex;gap:6px;';
-      colOrder.forEach(col => rowDiv.appendChild(this._mkSeat(col*10+row, sz)));
+      rowDiv.style.cssText = 'display:flex;gap:5px;';
+      for (let col=0; col<cfg.cols; col++) {
+        rowDiv.appendChild(this._mkSeat(col * cfg.rows + row, sz));
+      }
       wrap.appendChild(rowDiv);
-
       area.appendChild(wrap);
     });
     container.appendChild(area);
@@ -2050,6 +2071,13 @@ class ClassroomApp {
     this._showModal('homeworkModal');
   }
 
+  _syncComputerLayoutBtns() {
+    const layout = this._cls.computerLayout || 'v3';
+    document.querySelectorAll('.comp-layout-btn').forEach(btn=>{
+      btn.classList.toggle('active', btn.dataset.layout===layout);
+    });
+  }
+
   _renderHwStatusBar() {
     const bar = document.getElementById('hwStatusList');
     if (!bar) return;
@@ -2355,6 +2383,10 @@ class ClassroomApp {
           else if(mode==='scilab') gsBtn.textContent='自然教室積分';
           else gsBtn.textContent='小組積分';
         }
+        // 電腦教室版面按鈕顯示/隱藏
+        const compBtns=document.getElementById('computerLayoutBtns');
+        if(compBtns) compBtns.style.display=mode==='computer'?'flex':'none';
+        if(mode==='computer') this._syncComputerLayoutBtns();
         this._renderSeats();
       });
     });
@@ -2478,6 +2510,17 @@ class ClassroomApp {
       });
     });
     document.getElementById('closeTimeUpBtn')?.addEventListener('click',()=>this._hideModal('timeUpModal'));
+
+    // 電腦教室版面切換
+    document.querySelectorAll('.comp-layout-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const layout=btn.dataset.layout;
+        this._cls.computerLayout=layout;
+        this._scheduleSave();
+        this._syncComputerLayoutBtns();
+        this._renderSeats();
+      });
+    });
 
     // 日期時間時鐘
     const updateClock = () => {
