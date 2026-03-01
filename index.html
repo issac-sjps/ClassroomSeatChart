@@ -468,11 +468,19 @@ background-size:28px 28px;min-height:500px;}
         <button class="btn btn-outline btn-sm" id="screenshotBtn" title="另存座位表圖片">📸 截圖</button>
         <!-- 電腦教室版面設定（僅在電腦教室模式顯示） -->
         <div id="computerLayoutBtns" style="display:none;align-items:center;gap:4px;">
-          <span style="font-size:0.68rem;color:#7c3aed;font-weight:700;">版面：</span>
-          <button class="comp-layout-btn active" data-layout="v3" title="縱向3欄×10列（預設）">縱3</button>
-          <button class="comp-layout-btn" data-layout="h3" title="橫向10欄×3列">橫3</button>
-          <button class="comp-layout-btn" data-layout="v4" title="縱向4欄×8列">縱4</button>
-          <button class="comp-layout-btn" data-layout="h4" title="橫向8欄×4列">橫4</button>
+          <span style="font-size:0.68rem;color:#7c3aed;font-weight:700;white-space:nowrap;">🖥️ 版面</span>
+          <button class="comp-layout-btn active" data-layout="v3" title="縱向 3欄×10列（預設）">
+            <span class="cl-icon">⬆️</span><span class="cl-label">縱3欄</span>
+          </button>
+          <button class="comp-layout-btn" data-layout="h3" title="橫向 10欄×3列">
+            <span class="cl-icon">➡️</span><span class="cl-label">橫3列</span>
+          </button>
+          <button class="comp-layout-btn" data-layout="v4" title="縱向 4欄×8列">
+            <span class="cl-icon">⬆️</span><span class="cl-label">縱4欄</span>
+          </button>
+          <button class="comp-layout-btn" data-layout="h4" title="橫向 8欄×4列">
+            <span class="cl-icon">➡️</span><span class="cl-label">橫4列</span>
+          </button>
         </div>
       </div>
       <div id="seatingArea">
@@ -1338,7 +1346,7 @@ class ClassroomApp {
       h4: { cols:8,  rows:4,  label:'排', isVertical:false },
     };
     const cfg = layouts[layout];
-    const sz = Math.min(this.seatSize, cfg.isVertical ? 105 : 85);
+    const sz = this.seatSize;
     const sv = this.isStudentView;
 
     // 學生視角：前後翻（row順序反），左右不翻
