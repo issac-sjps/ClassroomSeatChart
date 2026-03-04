@@ -199,6 +199,12 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f4f8;color:#1e293b;heig
 .group-box{background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:1rem;position:relative;}
 .group-lbl-btn{position:absolute;top:-12px;left:12px;background:white;border:1.5px solid #bfdbfe;color:#3b82f6;padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;}
 .group-lbl-btn:hover{background:#eff6ff;}
+.group-count-ctrl{position:absolute;top:-12px;right:8px;display:flex;align-items:center;gap:3px;}
+.group-count-num{font-size:0.65rem;font-weight:700;color:#64748b;min-width:18px;text-align:center;}
+.gc-btn{width:18px;height:18px;border-radius:5px;border:1.5px solid #e2e8f0;background:white;color:#64748b;font-size:0.75rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;}
+.gc-btn:hover{border-color:#94a3b8;background:#f8fafc;color:#374151;}
+.gc-btn.gc-add:hover{border-color:#86efac;background:#f0fdf4;color:#16a34a;}
+.gc-btn.gc-sub:hover{border-color:#fca5a5;background:#fff5f5;color:#dc2626;}
 .group-inner{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px;}
 .group-row{display:flex;gap:8px;}
 
@@ -902,7 +908,35 @@ class ClassroomApp {
           if (!cls.computerSeats)          cls.computerSeats          = {};
           if (!cls.groupNames)             cls.groupNames             = {};
           if (!cls.scilabGroupNames)       cls.scilabGroupNames       = {};
+          if (!cls.groupSeatCounts)        cls.groupSeatCounts        = {};
+          if (!cls.scilabSeatCounts)       cls.scilabSeatCounts       = {};
           if (!cls.computerLayout)         cls.computerLayout         = 'v3';
+          // 遷移：舊 groupSeats 用 g*5+s，新用 g*8+s
+          if (cls.groupSeats && !cls._groupMigrated) {
+            const newSeats = {};
+            Object.entries(cls.groupSeats).forEach(([k,v]) => {
+              const ki = parseInt(k);
+              if (!isNaN(ki) && ki < 30) {
+                const g = Math.floor(ki/5), s = ki%5;
+                newSeats[g*8+s] = v;
+              } else { newSeats[k] = v; }
+            });
+            cls.groupSeats = newSeats;
+            cls._groupMigrated = true;
+          }
+          // 遷移：舊 scilabSeats 用 t*5+s，新用 t*8+s
+          if (cls.scilabSeats && !cls._scilabMigrated) {
+            const newSeats = {};
+            Object.entries(cls.scilabSeats).forEach(([k,v]) => {
+              const ki = parseInt(k);
+              if (!isNaN(ki) && ki < 30) {
+                const t = Math.floor(ki/5), s = ki%5;
+                newSeats[t*8+s] = v;
+              } else { newSeats[k] = v; }
+            });
+            cls.scilabSeats = newSeats;
+            cls._scilabMigrated = true;
+          }
           if (!cls.scilabGroupScores)      cls.scilabGroupScores      = {};
           if (!cls.scilabGroupScoreHistory) cls.scilabGroupScoreHistory = {};
           if (!cls.drawnSids)               cls.drawnSids               = [];
@@ -965,6 +999,7 @@ class ClassroomApp {
     return { name, students, normalSeats:{}, groupSeats:{}, examSeats:{}, freeSeats:{},
              scilabSeats:{}, computerSeats:{},
              groupNames:{}, scilabGroupNames:{},
+             groupSeatCounts:{}, scilabSeatCounts:{},
              computerLayout:'v3',
              scores:{}, scoreHistory:{},
              groupScores:{}, groupScoreHistory:{},
@@ -1191,47 +1226,87 @@ class ClassroomApp {
   // 學生視角：上下翻轉，每排內左右不變
   //   pos順序: [3,4] → [1,2] → [0]
   //   組順序翻轉: 上半/下半對調
+  // 計算N人最佳行列排列，回傳 [[row0seats], [row1seats], ...]（seat index）
+  _groupLayout(n) {
+    const plans = {
+      1:[[0]],
+      2:[[0,1]],
+      3:[[0,1,2]],
+      4:[[0,1],[2,3]],
+      5:[[0],[1,2],[3,4]],
+      6:[[0,1],[2,3],[4,5]],
+      7:[[0],[1,2],[3,4],[5,6]],
+      8:[[0,1],[2,3],[4,5],[6,7]],
+    };
+    return plans[n] || plans[5];
+  }
+
   _renderGroup(container) {
     const sv = this.isStudentView;
     const sz = this.seatSize;
     const gc = document.createElement('div'); gc.className='group-grid';
-    // 老師視角: 左欄[0,1,2]由上→下, 右欄[3,4,5]由上→下
-    // 學生視角: 上下翻 → 左欄[2,1,0], 右欄[5,4,3]（左右欄不換）
-    // 老師視角 grid (3欄):
-    //   [0組, 1組, 2組]  上排
-    //   [3組, 4組, 5組]  下排
-    // 學生視角 180度翻轉 (上下+左右):
-    //   [5組, 4組, 3組]  上排
-    //   [2組, 1組, 0組]  下排
+    // 老師視角: [0,1,2上排][3,4,5下排]; 學生視角180度翻
     const groupOrder = sv ? [5,4,3,2,1,0] : [0,1,2,3,4,5];
-    // 每組內座位 180度翻轉 (前後+左右):
-    //   老師: [0(前)], [1左,2右], [3左,4右(後)]
-    //   學生: [4左,3右(原後→前)], [2左,1右], [0]
-    const seatRows = sv ? [[4,3],[2,1],[0]] : [[0],[1,2],[3,4]];
-    // 組名稱存在class資料裡
     const cls = this._cls;
     if (!cls.groupNames) cls.groupNames = {};
+    if (!cls.groupSeatCounts) cls.groupSeatCounts = {};
+
     groupOrder.forEach(g => {
+      const n = cls.groupSeatCounts[g] ?? 5;
       const box = document.createElement('div'); box.className='group-box';
+
+      // 組名標籤 + 雙擊改名
       const groupName = cls.groupNames[g] || `第${g+1}組`;
       const lbl = document.createElement('button'); lbl.className='group-lbl-btn';
       lbl.textContent = groupName;
       lbl.onclick = () => this._showGroupScoreModal(g+1);
-      // 雙擊重命名
       lbl.ondblclick = (e) => {
         e.stopPropagation();
         const newName = prompt(`修改組名（目前：${groupName}）`, groupName);
         if (newName !== null && newName.trim()) {
           cls.groupNames[g] = newName.trim();
-          this._scheduleSave();
-          this._renderSeats();
+          this._scheduleSave(); this._renderSeats();
         }
       };
       box.appendChild(lbl);
+
+      // 右上角 +/- 控制（老師視角才顯示）
+      if (!sv) {
+        const ctrl = document.createElement('div'); ctrl.className='group-count-ctrl';
+        const subBtn = document.createElement('button'); subBtn.className='gc-btn gc-sub'; subBtn.textContent='−';
+        subBtn.title=`減少人數（目前${n}人）`;
+        subBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (n <= 1) return;
+          // 移除最後一個座位的學生
+          const lastPos = g*8+(n-1);
+          if (cls.groupSeats && cls.groupSeats[lastPos]) delete cls.groupSeats[lastPos];
+          cls.groupSeatCounts[g] = n-1;
+          this._scheduleSave(); this._renderSeats();
+        };
+        const numEl = document.createElement('span'); numEl.className='group-count-num'; numEl.textContent=n+'人';
+        const addBtn = document.createElement('button'); addBtn.className='gc-btn gc-add'; addBtn.textContent='+';
+        addBtn.title=`增加人數（目前${n}人）`;
+        addBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (n >= 8) return;
+          cls.groupSeatCounts[g] = n+1;
+          this._scheduleSave(); this._renderSeats();
+        };
+        ctrl.appendChild(subBtn); ctrl.appendChild(numEl); ctrl.appendChild(addBtn);
+        box.appendChild(ctrl);
+      }
+
+      // 座位排列
       const inner = document.createElement('div'); inner.className='group-inner';
-      seatRows.forEach(sr => {
+      let rows = this._groupLayout(n);
+      if (sv) {
+        // 180度翻轉：行逆序 + 每行內逆序
+        rows = [...rows].reverse().map(r => [...r].reverse());
+      }
+      rows.forEach(rowSeats => {
         const rDiv = document.createElement('div'); rDiv.className='group-row';
-        sr.forEach(s => rDiv.appendChild(this._mkSeat(g*5+s, sz)));
+        rowSeats.forEach(s => rDiv.appendChild(this._mkSeat(g*8+s, sz)));
         inner.appendChild(rDiv);
       });
       box.appendChild(inner);
@@ -1252,74 +1327,86 @@ class ClassroomApp {
     });
   }
 
-  // ── Sci Lab: 6桌 左3右3，每桌長邊3座(面台)+短邊2座 ──
-  // 座位編號：桌0~5，每桌pos = table*5 + 0..4
-  // pos0,1,2 = 長邊(靠講台)；pos3,4 = 短邊(後側)
-  //
-  // 老師視角: 左欄[1,2,3組由上↓]  右欄[4,5,6組由上↓]  每組長邊在上
-  // 學生視角: 上下翻轉（不翻左右）
-  //           左欄[3,2,1組由上↓]  右欄[6,5,4組由上↓]  每組短邊在上
+  // ── Sci Lab: 6桌 左3右3，彈性人數(預設5，最多8) ──
+  // posKey: t*8+s  (t=0..5, s=0..n-1)
+  // 老師視角: 左欄[0,1,2], 右欄[3,4,5]（各由上→下）
+  // 學生視角180度翻轉: 左欄[5,4,3], 右欄[2,1,0]
   _renderSciLab(container) {
     const sv = this.isStudentView;
     const sz = this.seatSize;
+    const cls = this._cls;
+    if (!cls.scilabSeatCounts) cls.scilabSeatCounts = {};
     const grid = document.createElement('div');
     grid.className = 'scilab-grid';
 
     const leftSection  = document.createElement('div'); leftSection.className='scilab-section';
     const rightSection = document.createElement('div'); rightSection.className='scilab-section';
 
-    // 老師視角: 左欄[0,1,2], 右欄[3,4,5]（各由上→下）
-    // 學生視角180度翻轉(上下+左右): 右欄變左且倒序, 左欄變右且倒序
-    //   新左欄 = [5,4,3], 新右欄 = [2,1,0]
     const leftOrder  = sv ? [5,4,3] : [0,1,2];
     const rightOrder = sv ? [2,1,0] : [3,4,5];
 
     const makeTable = (t) => {
+      const n = cls.scilabSeatCounts[t] ?? 5;
       const tableEl = document.createElement('div');
       tableEl.className = 'scilab-table';
 
+      // 組名標籤
       const lbl = document.createElement('button');
       lbl.className = 'scilab-table-lbl';
-      const scGroupName = (this._cls.scilabGroupNames||{})[t] || `第${t+1}組`;
+      const scGroupName = (cls.scilabGroupNames||{})[t] || `第${t+1}組`;
       lbl.textContent = scGroupName;
       lbl.onclick = () => this._showGroupScoreModal(t+1);
       lbl.ondblclick = (e) => {
         e.stopPropagation();
         const newName = prompt(`修改自然教室組名（目前：${scGroupName}）`, scGroupName);
         if (newName !== null && newName.trim()) {
-          if (!this._cls.scilabGroupNames) this._cls.scilabGroupNames = {};
-          this._cls.scilabGroupNames[t] = newName.trim();
-          this._scheduleSave();
-          this._renderSeats();
+          if (!cls.scilabGroupNames) cls.scilabGroupNames = {};
+          cls.scilabGroupNames[t] = newName.trim();
+          this._scheduleSave(); this._renderSeats();
         }
       };
       tableEl.appendChild(lbl);
 
-      if (sv) {
-        // 學生視角180度：短邊在上且左右翻[4,3]，長邊在下且左右翻[2,1,0]
-        const shortRow = document.createElement('div');
-        shortRow.className = 'scilab-short-row';
-        [4,3].forEach(s => shortRow.appendChild(this._mkSeat(t*5+s, sz)));
-        tableEl.appendChild(shortRow);
-        const div = document.createElement('div'); div.className='scilab-divider';
-        tableEl.appendChild(div);
-        const longRow = document.createElement('div');
-        longRow.className = 'scilab-long-row';
-        [2,1,0].forEach(s => longRow.appendChild(this._mkSeat(t*5+s, sz)));
-        tableEl.appendChild(longRow);
-      } else {
-        // 老師視角：長邊在上[0,1,2]，短邊在下[3,4]
-        const longRow = document.createElement('div');
-        longRow.className = 'scilab-long-row';
-        [0,1,2].forEach(s => longRow.appendChild(this._mkSeat(t*5+s, sz)));
-        tableEl.appendChild(longRow);
-        const div = document.createElement('div'); div.className='scilab-divider';
-        tableEl.appendChild(div);
-        const shortRow = document.createElement('div');
-        shortRow.className = 'scilab-short-row';
-        [3,4].forEach(s => shortRow.appendChild(this._mkSeat(t*5+s, sz)));
-        tableEl.appendChild(shortRow);
+      // 右上角 +/- 控制（老師視角才顯示）
+      if (!sv) {
+        const ctrl = document.createElement('div'); ctrl.className='group-count-ctrl';
+        const subBtn = document.createElement('button'); subBtn.className='gc-btn gc-sub'; subBtn.textContent='−';
+        subBtn.title=`減少人數（目前${n}人）`;
+        subBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (n <= 1) return;
+          const lastPos = t*8+(n-1);
+          if (cls.scilabSeats && cls.scilabSeats[lastPos]) delete cls.scilabSeats[lastPos];
+          cls.scilabSeatCounts[t] = n-1;
+          this._scheduleSave(); this._renderSeats();
+        };
+        const numEl = document.createElement('span'); numEl.className='group-count-num'; numEl.textContent=n+'人';
+        const addBtn = document.createElement('button'); addBtn.className='gc-btn gc-add'; addBtn.textContent='+';
+        addBtn.title=`增加人數（目前${n}人）`;
+        addBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (n >= 8) return;
+          cls.scilabSeatCounts[t] = n+1;
+          this._scheduleSave(); this._renderSeats();
+        };
+        ctrl.appendChild(subBtn); ctrl.appendChild(numEl); ctrl.appendChild(addBtn);
+        tableEl.appendChild(ctrl);
       }
+
+      // 座位排列：用 _groupLayout(n)
+      // 老師視角：[0(最前排)]→[最後排]，新增座位在下方（高index）
+      // 學生視角：180度翻（行逆序+行內逆序）
+      let rows = this._groupLayout(n);
+      if (sv) {
+        rows = [...rows].reverse().map(r => [...r].reverse());
+      }
+      const inner = document.createElement('div'); inner.className='group-inner';
+      rows.forEach(rowSeats => {
+        const rDiv = document.createElement('div'); rDiv.className='group-row';
+        rowSeats.forEach(s => rDiv.appendChild(this._mkSeat(t*8+s, sz)));
+        inner.appendChild(rDiv);
+      });
+      tableEl.appendChild(inner);
       return tableEl;
     };
 
