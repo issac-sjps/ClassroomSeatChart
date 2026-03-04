@@ -9,7 +9,7 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js';
-  import { getFirestore, doc, setDoc, getDoc }
+  import { getFirestore, doc, setDoc, getDoc, collection, addDoc, serverTimestamp }
     from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js';
 
   const firebaseConfig = {
@@ -35,6 +35,9 @@
   window._fsDoc = doc;
   window._fsSetDoc = setDoc;
   window._fsGetDoc = getDoc;
+  window._fsCollection = collection;
+  window._fsAddDoc = addDoc;
+  window._fsServerTimestamp = serverTimestamp;
   window._firebaseReady = true;
   // 給已經在等待的 ClassroomApp 觸發
   window.dispatchEvent(new Event('firebaseReady'));
@@ -2543,6 +2546,37 @@ class ClassroomApp {
   _showModal(id){document.getElementById(id).classList.add('show');}
   _hideModal(id){document.getElementById(id).classList.remove('show');}
 
+  // ── Analytics & Presence ─────────────────────────────────────
+  _track(action, extra={}) {
+    if (!this.user || !window._fsAddDoc) return;
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      const col = window._fsCollection(window._db, 'analytics', today, 'clicks');
+      window._fsAddDoc(col, {
+        uid: this.user.uid, email: this.user.email,
+        name: this.user.displayName || '',
+        action, ...extra,
+        ts: Date.now(), hour: new Date().getHours(),
+      });
+    } catch(e) {}
+  }
+
+  _initPresence() {
+    if (!this.user || !window._fsSetDoc) return;
+    const ref = window._fsDoc(window._db, 'presence', this.user.uid);
+    const upd = (online=true) => window._fsSetDoc(ref, {
+      uid: this.user.uid, email: this.user.email,
+      name: this.user.displayName || '',
+      online, lastSeen: Date.now(),
+      sessionStart: this._sessionStart || Date.now(),
+    }, {merge:true}).catch(()=>{});
+    this._sessionStart = Date.now();
+    upd(true);
+    this._presenceTimer = setInterval(()=>upd(true), 30000);
+    window.addEventListener('beforeunload', ()=>upd(false));
+    document.addEventListener('visibilitychange', ()=>upd(!document.hidden));
+  }
+
   // ── Event Binding ─────────────────────────────────────────────
   _bindEvents() {
     // Google Login
@@ -2605,6 +2639,7 @@ class ClassroomApp {
     const modeLabels={normal:'一般座位模式',group:'班級小組座位模式',exam:'考試座位模式',free:'自由座位模式',scilab:'自然教室模式',computer:'電腦教室模式'};
     Object.entries(modeMap).forEach(([btnId,mode])=>{
       document.getElementById(btnId)?.addEventListener('click',()=>{
+        this._track('mode_'+mode);
         this.currentMode=mode;
         Object.keys(modeMap).forEach(b=>{
           const el=document.getElementById(b);
@@ -2628,6 +2663,7 @@ class ClassroomApp {
 
     // Student view
     document.getElementById('studentViewBtn')?.addEventListener('click',()=>{
+      this._track('student_view', {on:!this.isStudentView});
       this.isStudentView=!this.isStudentView;
       const btn=document.getElementById('studentViewBtn');
       btn.textContent=this.isStudentView?'🎓 老師視角':'👤 學生視角';
@@ -2643,7 +2679,7 @@ class ClassroomApp {
     });
 
     // Scores
-    document.getElementById('showScoresBtn')?.addEventListener('click',()=>this._showScores());
+    document.getElementById('showScoresBtn')?.addEventListener('click',()=>{this._track('show_scores');this._showScores();});
     document.getElementById('closeScoresBtn')?.addEventListener('click',()=>this._hideModal('scoresModal'));
     document.getElementById('resetAllScoresBtn')?.addEventListener('click',()=>{
       const cls=this.data.classes[this.currentClassId];
@@ -2656,7 +2692,7 @@ class ClassroomApp {
     });
 
     // Group Scores
-    document.getElementById('showGroupScoresBtn')?.addEventListener('click',()=>this._showGroupScores());
+    document.getElementById('showGroupScoresBtn')?.addEventListener('click',()=>{this._track('show_group_scores',{mode:this.currentMode});this._showGroupScores();});
     document.getElementById('closeGroupScoresBtn')?.addEventListener('click',()=>this._hideModal('groupScoresModal'));
     document.getElementById('resetGroupScoresBtn')?.addEventListener('click',()=>{
       const isScilab=this.currentMode==='scilab';
@@ -2696,16 +2732,16 @@ class ClassroomApp {
       this._scheduleSave();
       this._renderDrawnList();
     });
-    document.getElementById('lotteryAllBtn')?.addEventListener('click',()=>this._startLottery('all'));
-    document.getElementById('lotteryBoysBtn')?.addEventListener('click',()=>this._startLottery('male'));
-    document.getElementById('lotteryGirlsBtn')?.addEventListener('click',()=>this._startLottery('female'));
+    document.getElementById('lotteryAllBtn')?.addEventListener('click',()=>{this._track('lottery_all');this._startLottery('all');});
+    document.getElementById('lotteryBoysBtn')?.addEventListener('click',()=>{this._track('lottery_male');this._startLottery('male');});
+    document.getElementById('lotteryGirlsBtn')?.addEventListener('click',()=>{this._track('lottery_female');this._startLottery('female');});
     document.getElementById('clearSelBtn')?.addEventListener('click',()=>this._clearSel());
     document.getElementById('closeLotteryResult')?.addEventListener('click',()=>this._hideModal('lotteryResultModal'));
 
     // Timer
     this.timerMode='countdown'; // default
     this.timerElapsed=0;
-    document.getElementById('timerBtn')?.addEventListener('click',()=>this._showModal('timerModal'));
+    document.getElementById('timerBtn')?.addEventListener('click',()=>{this._track('timer_open');this._showModal('timerModal');});
     document.getElementById('startTimerBtn')?.addEventListener('click',()=>this._startTimer());
     document.getElementById('cancelTimerBtn')?.addEventListener('click',()=>this._hideModal('timerModal'));
     // 模式切換按鈕
@@ -2770,7 +2806,7 @@ class ClassroomApp {
     setInterval(updateClock, 1000);
 
     // 截圖存圖
-    document.getElementById('screenshotBtn')?.addEventListener('click',()=>this._saveScreenshot());
+    document.getElementById('screenshotBtn')?.addEventListener('click',()=>{this._track('screenshot',{mode:this.currentMode});this._saveScreenshot();});
 
     // Student settings
     document.getElementById('settingsAddBtn')?.addEventListener('click',()=>this._adjustScore(1));
@@ -2837,7 +2873,7 @@ class ClassroomApp {
       this._hideModal('homeworkModal');
       if(this.currentSettingsSid) this._showModal('studentSettingsModal');
     });
-    document.getElementById('showMissingHwBtn')?.addEventListener('click',()=>this._showMissingHw());
+    document.getElementById('showMissingHwBtn')?.addEventListener('click',()=>{this._track('missing_hw');this._showMissingHw();});
     document.getElementById('closeMissingHwBtn')?.addEventListener('click',()=>this._hideModal('missingHwModal'));
     // 批次新增
     document.getElementById('batchAddHwBtn')?.addEventListener('click',()=>{
@@ -2883,7 +2919,7 @@ class ClassroomApp {
     });
 
     // Random / Reset
-    document.getElementById('randomBtn')?.addEventListener('click',()=>this._randomSeating());
+    document.getElementById('randomBtn')?.addEventListener('click',()=>{this._track('random_seating',{mode:this.currentMode});this._randomSeating();});
     document.getElementById('resetBtn')?.addEventListener('click',()=>{
       if(!confirm('確定重置座位？'))return;
       this._setSeats({});this._scheduleSave();this._renderSeats();
