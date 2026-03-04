@@ -281,19 +281,33 @@ background-size:28px 28px;min-height:500px;}
   0%  { background:#fef08a!important; border-color:#eab308!important; box-shadow:0 0 10px rgba(234,179,8,0.6)!important; transform:scale(1); }
   100%{ background:#fbbf24!important; border-color:#b45309!important; box-shadow:0 0 32px rgba(251,191,36,1)!important; transform:scale(1.05); }
 }
-/* 抽籤跑馬燈游標 */
+/* 準備中底色（符合資格但還沒被選） */
+.lottery-ready {
+  background: linear-gradient(135deg,#fef9c3,#fef08a) !important;
+  border-color: #fbbf24 !important;
+  opacity: 0.85;
+  transition: background 0.3s, border-color 0.3s !important;
+}
+/* 抽籤跳動游標（多游標用不同色） */
 .lottery-cursor {
   background: linear-gradient(135deg,#fde047,#f59e0b) !important;
   border-color: #d97706 !important;
   box-shadow: 0 0 28px rgba(251,191,36,0.95) !important;
-  transform: scale(1.08) !important;
+  transform: scale(1.1) !important;
   z-index: 10 !important;
+  opacity: 1 !important;
   transition: none !important;
+  animation: lcursor 0.45s ease-in-out infinite alternate !important;
 }
-/* 最終停止閃爍 */
+@keyframes lcursor {
+  0%  { box-shadow:0 0 14px rgba(251,191,36,0.7); transform:scale(1.06); }
+  100%{ box-shadow:0 0 34px rgba(251,191,36,1);   transform:scale(1.13); }
+}
+/* 最終停止爆炸 */
 @keyframes lboom {
-  0%  { transform:scale(1.0); box-shadow:0 0 12px rgba(239,68,68,0.5); }
-  50% { transform:scale(1.18); box-shadow:0 0 40px rgba(239,68,68,1); }
+  0%  { transform:scale(1.0);  box-shadow:0 0 10px rgba(239,68,68,0.4); }
+  40% { transform:scale(1.22); box-shadow:0 0 48px rgba(239,68,68,1); }
+  70% { transform:scale(1.05); box-shadow:0 0 20px rgba(239,68,68,0.7); }
   100%{ transform:scale(1.08); box-shadow:0 0 24px rgba(239,68,68,0.8); }
 }
 .lottery-selected {
@@ -1923,7 +1937,7 @@ class ClassroomApp {
   _startLottery(type) {
     if (this.isLotteryRunning) return;
     this._clearSel();
-    const seats = this._seats;
+    const seats  = this._seats;
     const isFree = this.currentMode === 'free';
     const excludeDrawn = document.getElementById('excludeDrawnBtn')?.classList.contains('active-exclude');
     const drawnSids = new Set(this._cls.drawnSids||[]);
@@ -1931,13 +1945,14 @@ class ClassroomApp {
     Object.entries(seats).forEach(([posKey, sid]) => {
       const st = this._students[sid];
       if (!st) return;
-      if (type!=='all'&&st.gender!==type) return;
+      if (type!=='all' && st.gender!==type) return;
       if (excludeDrawn && drawnSids.has(sid)) return;
       eligible.push({posKey, st});
     });
     const count = parseInt(document.getElementById('lotteryCount').value)||1;
     if (!eligible.length) { alert('沒有符合條件的學生在座位上'); return; }
     if (count > eligible.length) { alert(`只有${eligible.length}人，不足${count}人`); return; }
+
     this.isLotteryRunning = true;
     this.flashIntervals = [];
 
@@ -1946,72 +1961,84 @@ class ClassroomApp {
       return document.querySelector(`[data-position="${posKey}"]`);
     };
 
-    // 先決定中獎者（動畫結束時才公布）
+    // ── Step 1：符合資格的座位先亮「準備底色」────────────────
+    eligible.forEach(({posKey}) => {
+      const el = getEl(posKey);
+      if (el) { el.classList.add('lottery-ready'); this.flashIntervals.push(el); }
+    });
+
+    // ── Step 2：預先決定中獎者 ────────────────────────────────
     const winners = [...eligible].sort(()=>Math.random()-0.5).slice(0, count);
 
-    // ── 跑馬燈動畫 ──────────────────────────────────────────
-    // 時間表：共 ~3.5秒，分三階段
-    // 快速 (0~1.5s): 間隔 60ms
-    // 減速 (1.5~3s): 間隔從 60ms → 280ms（逐步加大）
-    // 停止 (3s~):    停在中獎者，播放 boom
-    const TOTAL_MS   = 3500;
-    const FAST_END   = 1400;
-    const SLOW_START = 1400;
+    // ── Step 3：為每個中獎者規劃跳動路線 ─────────────────────
+    // 每個游標獨立：隨機跳 STEPS 步，最後一步 = 自己的中獎者
+    const STEPS    = Math.max(10, Math.min(16, eligible.length + 4)); // 10~16步
+    const INTERVAL = 480; // ms/步，慢慢跳
+    // 每個游標的路徑：前 STEPS-1 步從 eligible 隨機（避開自己的終點），最後一步是中獎者
+    const paths = winners.map(winner => {
+      const others = eligible.filter(e => e.posKey !== winner.posKey);
+      const path = [];
+      for (let i = 0; i < STEPS - 1; i++) {
+        // 不連續重複同一個（多點才不黏）
+        let pick;
+        do { pick = others[Math.floor(Math.random() * others.length)]; }
+        while (others.length > 1 && path.length > 0 && pick.posKey === path[path.length-1].posKey);
+        path.push(pick);
+      }
+      path.push(winner); // 最後一步是中獎者
+      return path;
+    });
 
-    let curIdx = 0;          // 目前游標位置
-    let lastEl = null;       // 上一個亮起的元素
-    let elapsed = 0;
-    let phase = 'fast';      // 'fast' | 'slow' | 'done'
+    // ── Step 4：同步跳動所有游標 ─────────────────────────────
+    // cursorEls[i] = 第 i 個游標目前亮著的 el
+    const cursorEls = new Array(count).fill(null);
 
-    // 打亂 eligible 順序讓游標路徑隨機
-    const pool = [...eligible].sort(()=>Math.random()-0.5);
+    const jump = (step) => {
+      if (!this.isLotteryRunning) return;
 
-    const step = (interval) => {
-      if (!this.isLotteryRunning) return; // 被外部中止
+      // 移除所有游標
+      cursorEls.forEach(el => { if (el) el.classList.remove('lottery-cursor'); });
 
-      // 移除上一個游標
-      if (lastEl) { lastEl.classList.remove('lottery-cursor'); lastEl = null; }
-
-      // 亮下一個
-      const item = pool[curIdx % pool.length];
-      const el = getEl(item.posKey);
-      if (el) { el.classList.add('lottery-cursor'); lastEl = el; }
-      curIdx++;
-      elapsed += interval;
-
-      if (elapsed < FAST_END) {
-        // 快速階段：固定 60ms
-        this._lotteryTimer = setTimeout(()=>step(60), 60);
-      } else if (elapsed < TOTAL_MS) {
-        // 減速階段：間隔從 60 → 320ms，線性增加
-        const progress = (elapsed - SLOW_START) / (TOTAL_MS - SLOW_START); // 0→1
-        const nextInterval = Math.round(60 + progress * 260);
-        this._lotteryTimer = setTimeout(()=>step(nextInterval), nextInterval);
+      if (step < STEPS) {
+        // 每個游標跳到路徑的第 step 步
+        paths.forEach((path, i) => {
+          const el = getEl(path[step].posKey);
+          cursorEls[i] = el;
+          if (el) el.classList.add('lottery-cursor');
+        });
+        // 最後兩步放慢，增加懸念
+        const delay = step >= STEPS - 2 ? INTERVAL * 1.8 : INTERVAL;
+        this._lotteryTimer = setTimeout(() => jump(step + 1), delay);
       } else {
-        // ── 結束：停在中獎者 ──────────────────────────────────
-        if (lastEl) { lastEl.classList.remove('lottery-cursor'); }
+        // ── 結束！清除準備底色，亮中獎者 ──────────────────────
+        this.flashIntervals.forEach(el => { if (el) { el.classList.remove('lottery-ready'); } });
+        this.flashIntervals = [];
 
         winners.forEach(({posKey}) => {
           const el = getEl(posKey);
           if (!el) return;
           el.classList.add('lottery-selected');
-          el.style.animation = 'lboom 0.5s ease-out forwards';
+          el.style.animation = 'lboom 0.55s ease-out forwards';
         });
 
         this.selectedStudents = winners;
-        this._showLotteryResult(winners);
-        const names = winners.map(w=>w.st.name);
-        this._speak(winners.length===1?`恭喜${winners[0].st.name}`:`恭喜${names.join('、')}`);
+        setTimeout(() => {
+          this._showLotteryResult(winners);
+          const names = winners.map(w => w.st.name);
+          this._speak(winners.length===1 ? `恭喜${winners[0].st.name}` : `恭喜${names.join('、')}`);
+        }, 400);
+
         const cls = this.data.classes[this.currentClassId];
         if (!cls.drawnSids) cls.drawnSids = [];
-        winners.forEach(w=>{ if(!cls.drawnSids.includes(w.st.id)) cls.drawnSids.push(w.st.id); });
+        winners.forEach(w => { if (!cls.drawnSids.includes(w.st.id)) cls.drawnSids.push(w.st.id); });
         this._scheduleSave();
         this._renderDrawnList();
-        document.getElementById('clearSelBtn').style.display='';
+        document.getElementById('clearSelBtn').style.display = '';
         this.isLotteryRunning = false;
       }
     };
-    step(60);
+
+    jump(0);
   }
 
   _showLotteryResult(winners) {
@@ -2029,10 +2056,10 @@ class ClassroomApp {
   _clearSel() {
     if (this._lotteryTimer) { clearTimeout(this._lotteryTimer); this._lotteryTimer=null; }
     this.isLotteryRunning = false;
-    this.flashIntervals.forEach(el=>{ if(el && el.classList) { el.classList.remove('lottery-flash','lottery-cursor'); el.style.animationDelay=''; el.style.animation=''; } });
+    this.flashIntervals.forEach(el=>{ if(el && el.classList) el.classList.remove('lottery-flash','lottery-cursor','lottery-ready'); });
     this.flashIntervals=[];
-    document.querySelectorAll('.lottery-selected,.lottery-flash,.lottery-cursor').forEach(el=>{
-      el.classList.remove('lottery-selected','lottery-flash','lottery-cursor');
+    document.querySelectorAll('.lottery-selected,.lottery-flash,.lottery-cursor,.lottery-ready').forEach(el=>{
+      el.classList.remove('lottery-selected','lottery-flash','lottery-cursor','lottery-ready');
       el.style.animationDelay=''; el.style.animation='';
     });
     this.selectedStudents=[];
