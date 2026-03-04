@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系統管理後台 — 教室座位系統</title>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js';
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
+    from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js';
+  import { getFirestore, collection, getDocs, doc, getDoc, onSnapshot, query, orderBy, limit, where }
+    from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js';
+
+  const ADMIN_EMAIL = 'issac@sjps.kh.edu.tw';
+  const firebaseConfig = {
+    apiKey: "AIzaSyBAbSddZ6VsHjw-NjW77kxS8iuC5-cW_wY",
+    authDomain: "sjps-classroomseatchart.firebaseapp.com",
+    projectId: "sjps-classroomseatchart",
+    storageBucket: "sjps-classroomseatchart.firebasestorage.app",
+    messagingSenderId: "812781751431",
+    appId: "1:812781751431:web:3cad939d2c29fbbde67c22"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // ── 按鈕中文名稱對照 ──────────────────────────────────────
+  const ACTION_LABELS = {
+    login:             '🔐 登入系統',
+    mode_normal:       '📋 一般座位',
+    mode_group:        '👥 班級小組座位',
+    mode_exam:         '📝 考試座位',
+    mode_free:         '🆓 自由座位',
+    mode_scilab:       '🔬 自然教室',
+    mode_computer:     '💻 電腦教室',
+    student_view:      '👤 學生視角',
+    show_scores:       '🏆 個人積分',
+    show_group_scores: '🏅 小組積分',
+    lottery_all:       '🎲 全部抽籤',
+    lottery_male:      '🟦 男生抽籤',
+    lottery_female:    '🟥 女生抽籤',
+    timer_open:        '⏱ 計時器',
+    screenshot:        '📸 截圖',
+    missing_hw:        '📋 缺交作業',
+    random_seating:    '🔀 隨機入座',
+  };
+
+  // ── 工具函數 ──────────────────────────────────────────────
+  const fmt = ms => {
+    const s=Math.floor(ms/1000), m=Math.floor(s/60), h=Math.floor(m/60);
+    return h>0?`${h}h ${m%60}m`:m>0?`${m}m ${s%60}s`:`${s}s`;
+  };
+  const dateStr = (d=new Date()) => d.toISOString().slice(0,10);
+
+  // ── 主流程 ────────────────────────────────────────────────
+  onAuthStateChanged(auth, async user => {
+    document.getElementById('loading').style.display='none';
+    if (!user) { showLogin(); return; }
+    if (user.email !== ADMIN_EMAIL) {
+      document.getElementById('denied').style.display='flex'; return;
+    }
+    document.getElementById('adminApp').style.display='flex';
+    document.getElementById('adminEmail').textContent = user.displayName || user.email;
+    document.getElementById('adminAvatar').src = user.photoURL||'';
+    await loadDashboard();
+    startPresenceListen();
+  });
+
+  function showLogin() {
+    document.getElementById('loginBox').style.display='flex';
+  }
+  document.getElementById('loginBtn')?.addEventListener('click', async () => {
+    await signInWithPopup(auth, new GoogleAuthProvider()).catch(()=>{});
+  });
+
+  // ── 即時線上使用者 ────────────────────────────────────────
+  function startPresenceListen() {
+    const col = collection(db, 'presence');
+    onSnapshot(col, snap => {
+      const now = Date.now();
+      const ONLINE_THRESHOLD = 90000; // 90秒內算線上
+      const users = snap.docs.map(d=>d.data()).filter(u=>u.lastSeen && now-u.lastSeen < ONLINE_THRESHOLD);
+      const offline = snap.docs.map(d=>d.data()).filter(u=>!u.lastSeen||now-u.lastSeen>=ONLINE_THRESHOLD);
+      renderOnlineUsers(users, offline, now);
+    });
+  }
+
+  function renderOnlineUsers(online, offline, now) {
+    document.getElementById('onlineCount').textContent = online.length;
+    document.getElementById('totalUsers').textContent  = online.length + offline.length;
+
+    const container = document.getElementById('onlineList');
+    container.innerHTML = '';
+
+    const allUsers = [
+      ...online.map(u=>({...u, isOnline:true})),
+      ...offline.map(u=>({...u, isOnline:false}))
+    ].sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
+
+    allUsers.forEach(u => {
+      const ago = u.lastSeen ? now - u.lastSeen : null;
+      const duration = u.sessionStart && u.isOnline ? now - u.sessionStart : null;
+      const row = document.createElement('div');
+      row.className = 'user-row';
+      row.innerHTML = `
+        <div class="user-dot ${u.isOnline?'dot-on':'dot-off'}"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.85rem;color:#1e293b;">${u.name||'未知'}</div>
+          <div style="font-size:0.7rem;color:#94a3b8;">${u.email||''}</div>
+        </div>
+        <div style="text-align:right;font-size:0.72rem;color:#64748b;">
+          ${u.isOnline
+            ? `<span style="color:#10b981;font-weight:700;">● 線上中</span>${duration?`<br>停留 ${fmt(duration)}`:''}` 
+            : ago?`${fmt(ago)} 前`:'未知'}
+        </div>`;
+      container.appendChild(row);
+    });
+    if(!allUsers.length) container.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;font-size:0.82rem;">尚無使用者資料</div>';
+  }
+
+  // ── 載入分析資料 ──────────────────────────────────────────
+  let selectedDate = dateStr();
+  let allDates = [];
+
+  async function loadDashboard() {
+    // 取得所有可用日期（analytics 下的子集合）
+    const analyticsRef = collection(db, 'analytics');
+    const snap = await getDocs(analyticsRef).catch(()=>({docs:[]}));
+    allDates = snap.docs.map(d=>d.id).filter(id=>/^\d{4}-\d{2}-\d{2}$/.test(id)).sort().reverse();
+
+    if(!allDates.length) allDates=[dateStr()];
+    renderDateSelector();
+    await loadDayData(selectedDate);
+    await loadAllUsers();
+    await loadMonthlyChart();
+  }
+
+  function renderDateSelector() {
+    const sel = document.getElementById('dateSelector');
+    sel.innerHTML='';
+    allDates.forEach(d=>{
+      const btn = document.createElement('button');
+      btn.className='date-btn'+(d===selectedDate?' active':'');
+      btn.textContent = d;
+      btn.onclick = async()=>{
+        selectedDate=d;
+        document.querySelectorAll('.date-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        await loadDayData(d);
+      };
+      sel.appendChild(btn);
+    });
+  }
+
+  async function loadDayData(date) {
+    document.getElementById('dayTitle').textContent = date + ' 點擊統計';
+    const col = collection(db,'analytics',date,'clicks');
+    const snap = await getDocs(col).catch(()=>({docs:[]}));
+    const clicks = snap.docs.map(d=>d.data());
+
+    // 統計
+    const actionCount = {};
+    const hourCount = Array(24).fill(0);
+    const userSessions = {};
+    clicks.forEach(c=>{
+      actionCount[c.action] = (actionCount[c.action]||0)+1;
+      if(c.hour>=0) hourCount[c.hour]++;
+      if(c.email) userSessions[c.email]=(userSessions[c.email]||0)+1;
+    });
+
+    renderActionChart(actionCount, clicks.length);
+    renderHourChart(hourCount);
+    renderUserActivity(userSessions);
+    document.getElementById('totalClicks').textContent = clicks.length;
+    document.getElementById('activeUsersDay').textContent = Object.keys(userSessions).length;
+  }
+
+  function renderActionChart(actionCount, total) {
+    const container = document.getElementById('actionChart');
+    container.innerHTML='';
+    const sorted = Object.entries(actionCount).sort((a,b)=>b[1]-a[1]);
+    if(!sorted.length){container.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;">今日尚無資料</div>';return;}
+    const max = sorted[0][1];
+    sorted.forEach(([action, count], i)=>{
+      const pct = Math.round(count/total*100);
+      const colors = ['#6366f1','#8b5cf6','#a78bfa','#c4b5fd','#ddd6fe'];
+      const color = colors[Math.min(i,4)];
+      const label = ACTION_LABELS[action] || action;
+      const row = document.createElement('div');
+      row.className='action-row';
+      row.innerHTML=`
+        <div class="action-label" title="${action}">${label}</div>
+        <div class="action-bar-wrap">
+          <div class="action-bar" style="width:${Math.round(count/max*100)}%;background:${color};"></div>
+        </div>
+        <div class="action-count">${count} <span style="color:#94a3b8;font-size:0.68rem;">(${pct}%)</span></div>`;
+      container.appendChild(row);
+    });
+  }
+
+  function renderHourChart(hourCount) {
+    const container = document.getElementById('hourChart');
+    container.innerHTML='';
+    const max = Math.max(...hourCount, 1);
+    hourCount.forEach((v, h)=>{
+      const col = document.createElement('div');
+      col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;';
+      const bar = document.createElement('div');
+      bar.style.cssText=`width:100%;border-radius:4px 4px 0 0;background:${v?'#6366f1':'#e2e8f0'};
+        height:${Math.max(2,Math.round(v/max*100))}px;transition:height 0.3s;`;
+      bar.title=`${h}:00 — ${v}次`;
+      const lbl = document.createElement('div');
+      lbl.style.cssText='font-size:0.55rem;color:#94a3b8;';
+      lbl.textContent = h%6===0?`${h}h`:'';
+      col.appendChild(bar); col.appendChild(lbl);
+      container.appendChild(col);
+    });
+  }
+
+  function renderUserActivity(userSessions) {
+    const container = document.getElementById('userActivity');
+    container.innerHTML='';
+    const sorted = Object.entries(userSessions).sort((a,b)=>b[1]-a[1]);
+    if(!sorted.length){container.innerHTML='<div style="color:#94a3b8;font-size:0.8rem;">尚無資料</div>';return;}
+    sorted.forEach(([email,count])=>{
+      const row = document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:0.78rem;';
+      row.innerHTML=`<span style="color:#374151;">${email}</span><span style="font-weight:700;color:#6366f1;">${count} 次</span>`;
+      container.appendChild(row);
+    });
+  }
+
+  async function loadAllUsers() {
+    const snap = await getDocs(collection(db,'teachers')).catch(()=>({docs:[]}));
+    document.getElementById('registeredUsers').textContent = snap.docs.length;
+    const list = document.getElementById('allUsersList');
+    list.innerHTML='';
+    snap.docs.forEach(d=>{
+      const data=d.data();
+      const classCount = Object.keys(data.classes||{}).length;
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;';
+      row.innerHTML=`
+        <div>
+          <div style="font-size:0.82rem;font-weight:600;color:#1e293b;">${data.displayName||data.email||d.id}</div>
+          <div style="font-size:0.68rem;color:#94a3b8;">${data.email||''}</div>
+        </div>
+        <div style="font-size:0.72rem;color:#6366f1;font-weight:700;">${classCount} 班</div>`;
+      list.appendChild(row);
+    });
+  }
+
+  async function loadMonthlyChart() {
+    const monthPrefix = dateStr().slice(0,7); // e.g. "2025-03"
+    const monthDates = allDates.filter(d=>d.startsWith(monthPrefix));
+    const monthData = {};
+    await Promise.all(monthDates.map(async d=>{
+      const snap = await getDocs(collection(db,'analytics',d,'clicks')).catch(()=>({docs:[]}));
+      monthData[d] = snap.docs.length;
+    }));
+    renderMonthlyChart(monthData, monthPrefix);
+  }
+
+  function renderMonthlyChart(data, monthPrefix) {
+    const container = document.getElementById('monthlyChart');
+    container.innerHTML='';
+    const days = Object.keys(data).sort();
+    if(!days.length){container.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;font-size:0.82rem;">本月尚無資料</div>';return;}
+    const max = Math.max(...Object.values(data),1);
+    days.forEach(d=>{
+      const v=data[d];
+      const col=document.createElement('div');
+      col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:18px;';
+      const bar=document.createElement('div');
+      bar.style.cssText=`width:80%;border-radius:4px 4px 0 0;background:${v?'#10b981':'#e2e8f0'};
+        height:${Math.max(2,Math.round(v/max*80))}px;`;
+      bar.title=`${d}: ${v}次`;
+      const lbl=document.createElement('div');
+      lbl.style.cssText='font-size:0.5rem;color:#94a3b8;';
+      lbl.textContent=d.slice(8);
+      col.appendChild(bar); col.appendChild(lbl);
+      container.appendChild(col);
+    });
+    document.getElementById('monthTitle').textContent = monthPrefix + ' 每日點擊趨勢';
+  }
+
+  // 重新整理
+  document.getElementById('refreshBtn')?.addEventListener('click', loadDashboard);
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#1e293b;min-height:100vh;}
+#loading{display:flex;align-items:center;justify-content:center;height:100vh;font-size:1rem;color:#94a3b8;}
+#loginBox{display:none;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;}
+#denied{display:none;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px;}
+#adminApp{display:none;flex-direction:column;min-height:100vh;}
+
+/* Header */
+.admin-header{background:linear-gradient(135deg,#1e1b4b,#312e81);color:white;padding:14px 24px;
+  display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.2);}
+.admin-logo{display:flex;align-items:center;gap:10px;}
+.admin-logo-icon{font-size:1.4rem;}
+.admin-logo-text{font-size:1.1rem;font-weight:800;letter-spacing:0.3px;}
+.admin-badge{background:#4f46e5;padding:2px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;margin-left:8px;}
+.admin-user{display:flex;align-items:center;gap:8px;font-size:0.82rem;}
+.admin-avatar{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);}
+.refresh-btn{padding:5px 14px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);
+  color:white;font-size:0.75rem;cursor:pointer;font-weight:600;}
+.refresh-btn:hover{background:rgba(255,255,255,0.2);}
+
+/* Layout */
+.admin-body{display:grid;grid-template-columns:280px 1fr;gap:0;flex:1;}
+.sidebar{background:white;border-right:1.5px solid #e2e8f0;padding:16px;overflow-y:auto;}
+.main-panel{padding:20px;overflow-y:auto;}
+
+/* Cards */
+.card{background:white;border-radius:14px;border:1.5px solid #e2e8f0;padding:16px;margin-bottom:16px;}
+.card-title{font-size:0.78rem;font-weight:800;color:#64748b;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.stat-box{background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:10px;padding:12px;text-align:center;}
+.stat-box.green{background:linear-gradient(135deg,#ecfdf5,#d1fae5);}
+.stat-box.purple{background:linear-gradient(135deg,#faf5ff,#ede9fe);}
+.stat-box.amber{background:linear-gradient(135deg,#fffbeb,#fef3c7);}
+.stat-num{font-size:1.8rem;font-weight:800;color:#4f46e5;line-height:1;}
+.stat-num.green{color:#059669;}
+.stat-num.purple{color:#7c3aed;}
+.stat-num.amber{color:#d97706;}
+.stat-label{font-size:0.65rem;color:#64748b;margin-top:3px;font-weight:600;}
+
+/* Online users */
+.user-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;}
+.user-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-on{background:#10b981;box-shadow:0 0 6px rgba(16,185,129,0.5);}
+.dot-off{background:#e2e8f0;}
+
+/* Date selector */
+.date-btn{padding:3px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:white;
+  color:#64748b;font-size:0.72rem;font-weight:600;cursor:pointer;margin:2px;}
+.date-btn.active{background:#6366f1;color:white;border-color:#4f46e5;}
+.date-btn:hover:not(.active){border-color:#a5b4fc;}
+.date-scroll{display:flex;flex-wrap:wrap;gap:2px;max-height:80px;overflow-y:auto;}
+
+/* Action chart */
+.action-row{display:flex;align-items:center;gap:8px;padding:4px 0;}
+.action-label{width:140px;font-size:0.75rem;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+.action-bar-wrap{flex:1;height:16px;background:#f1f5f9;border-radius:4px;overflow:hidden;}
+.action-bar{height:100%;border-radius:4px;transition:width 0.4s;}
+.action-count{width:70px;text-align:right;font-size:0.75rem;font-weight:700;color:#374151;flex-shrink:0;}
+
+/* Hour chart */
+#hourChart{display:flex;align-items:flex-end;height:80px;gap:2px;padding-top:4px;}
+#monthlyChart{display:flex;align-items:flex-end;height:80px;gap:1px;padding-top:4px;}
+
+/* Login */
+.login-card{background:white;border-radius:16px;padding:36px 40px;text-align:center;
+  box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1.5px solid #e2e8f0;}
+.login-icon{font-size:2.5rem;margin-bottom:12px;}
+.login-title{font-size:1.1rem;font-weight:800;color:#1e293b;margin-bottom:6px;}
+.login-sub{font-size:0.82rem;color:#94a3b8;margin-bottom:20px;}
+.login-btn{display:flex;align-items:center;gap:10px;padding:10px 20px;border-radius:10px;
+  border:1.5px solid #e2e8f0;background:white;cursor:pointer;font-size:0.85rem;font-weight:600;
+  color:#374151;transition:all 0.15s;}
+.login-btn:hover{border-color:#a5b4fc;background:#f5f5ff;}
+.section-title{font-size:0.85rem;font-weight:800;color:#1e293b;margin-bottom:10px;}
+</style>
+</head>
+<body>
+
+<div id="loading">載入中⋯</div>
+
+<div id="loginBox">
+  <div class="login-card">
+    <div class="login-icon">🔐</div>
+    <div class="login-title">管理員後台</div>
+    <div class="login-sub">僅限 issac@sjps.kh.edu.tw 登入</div>
+    <button class="login-btn" id="loginBtn">
+      <svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#FFC107" d="M43.6 20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.2-2.7-.4-4z"/>
+        <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.7 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.2 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+        <path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.8 13.5-4.7L31 33.8C28.9 35.2 26.6 36 24 36c-5.3 0-9.8-3.6-11.3-8.5L6 32.3C9.4 38.8 16.2 44 24 44z"/>
+        <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.7 2-2 3.8-3.7 5l6.5 5.5C41.7 34.9 44 29.9 44 24c0-1.3-.2-2.7-.4-4z"/>
+      </svg>
+      使用 Google 帳號登入
+    </button>
+  </div>
+</div>
+
+<div id="denied" style="flex-direction:column;gap:12px;">
+  <div style="font-size:3rem;">🚫</div>
+  <div style="font-size:1.1rem;font-weight:700;color:#1e293b;">無存取權限</div>
+  <div style="font-size:0.85rem;color:#94a3b8;">此頁面僅限管理員帳號使用</div>
+</div>
+
+<div id="adminApp">
+  <!-- Header -->
+  <header class="admin-header">
+    <div class="admin-logo">
+      <span class="admin-logo-icon">📊</span>
+      <span class="admin-logo-text">系統管理後台</span>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+    <div class="admin-user">
+      <img id="adminAvatar" class="admin-avatar" src="" alt="">
+      <span id="adminEmail"></span>
+      <button class="refresh-btn" id="refreshBtn">🔄 重新整理</button>
+    </div>
+  </header>
+
+  <div class="admin-body">
+
+    <!-- Sidebar：線上使用者 -->
+    <aside class="sidebar">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title">即時概覽</div>
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="stat-num" id="onlineCount">-</div>
+            <div class="stat-label">線上中</div>
+          </div>
+          <div class="stat-box green">
+            <div class="stat-num green" id="totalUsers">-</div>
+            <div class="stat-label">總使用者</div>
+          </div>
+          <div class="stat-box purple">
+            <div class="stat-num purple" id="registeredUsers">-</div>
+            <div class="stat-label">已註冊</div>
+          </div>
+          <div class="stat-box amber">
+            <div class="stat-num amber" id="activeUsersDay">-</div>
+            <div class="stat-label">今日活躍</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:12px;">
+        <div class="card-title">線上使用者</div>
+        <div id="onlineList"></div>
+      </div>
+
+      <div class="card" style="padding:12px;">
+        <div class="card-title">所有使用者</div>
+        <div id="allUsersList"></div>
+      </div>
+    </aside>
+
+    <!-- Main panel -->
+    <main class="main-panel">
+
+      <!-- 日期選擇 -->
+      <div class="card">
+        <div class="card-title">選擇日期</div>
+        <div class="date-scroll" id="dateSelector"></div>
+      </div>
+
+      <!-- 今日統計 -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div class="section-title" id="dayTitle">今日點擊統計</div>
+          <div style="font-size:0.78rem;color:#6366f1;font-weight:700;">
+            共 <span id="totalClicks">0</span> 次點擊
+          </div>
+        </div>
+        <div id="actionChart"></div>
+      </div>
+
+      <!-- 每小時分佈 -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:8px;">當日每小時使用分佈</div>
+        <div id="hourChart"></div>
+      </div>
+
+      <!-- 本月趨勢 -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:8px;" id="monthTitle">本月每日點擊趨勢</div>
+        <div id="monthlyChart"></div>
+      </div>
+
+      <!-- 使用者詳細活動 -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:8px;">使用者活動明細（選定日）</div>
+        <div id="userActivity"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+</body>
+</html>
