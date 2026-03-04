@@ -486,6 +486,10 @@ background-size:28px 28px;min-height:500px;}
       <input type="number" id="lotteryCount" value="1" min="1" max="10"
         style="width:40px;padding:3px 5px;border:1.5px solid #e2e8f0;border-radius:6px;text-align:center;font-size:0.8rem;color:#1e293b;background:white;">
       <span style="font-size:0.78rem;color:#374151;">人</span>
+      <span style="font-size:0.78rem;color:#374151;margin-left:2px;">⏳</span>
+      <input type="number" id="lotteryDuration" value="5" min="2" max="30"
+        style="width:38px;padding:3px 5px;border:1.5px solid #e2e8f0;border-radius:6px;text-align:center;font-size:0.8rem;color:#1e293b;background:white;" title="抽籤動畫秒數">
+      <span style="font-size:0.78rem;color:#374151;">秒</span>
       <button class="btn btn-amber" id="lotteryAllBtn">全部抽籤</button>
       <button class="btn btn-primary" id="lotteryBoysBtn">男生抽籤</button>
       <button class="btn btn-red" id="lotteryGirlsBtn">女生抽籤</button>
@@ -1972,8 +1976,10 @@ class ClassroomApp {
 
     // ── Step 3：為每個中獎者規劃跳動路線 ─────────────────────
     // 每個游標獨立：隨機跳 STEPS 步，最後一步 = 自己的中獎者
-    const STEPS    = Math.max(10, Math.min(16, eligible.length + 4)); // 10~16步
-    const INTERVAL = 480; // ms/步，慢慢跳
+    const totalMs  = (parseFloat(document.getElementById('lotteryDuration')?.value) || 5) * 1000;
+    // 步數：讓每步大約 totalMs/STEPS，最少8步最多20步
+    const STEPS    = Math.max(8, Math.min(20, Math.round(totalMs / 400)));
+    const INTERVAL = Math.round((totalMs * 0.78) / STEPS); // 保留22%給最後2步放慢
     // 每個游標的路徑：前 STEPS-1 步從 eligible 隨機（避開自己的終點），最後一步是中獎者
     const paths = winners.map(winner => {
       const others = eligible.filter(e => e.posKey !== winner.posKey);
