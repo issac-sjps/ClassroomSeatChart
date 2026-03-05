@@ -215,10 +215,9 @@
         height:${bh}px;transition:height 0.3s;flex-shrink:0;`;
       bar.title=`${h}:00 — ${v}次`;
       const lbl = document.createElement('div');
-      lbl.style.cssText='font-size:0.5rem;color:#94a3b8;text-align:center;line-height:1.2;flex-shrink:0;height:18px;display:flex;align-items:flex-end;justify-content:center;';
+      lbl.style.cssText='font-size:0.48rem;color:#94a3b8;text-align:center;flex-shrink:0;height:16px;line-height:16px;overflow:hidden;';
       // 每3小時顯示一次（0,3,6,9...），奇數用細一點
-      lbl.textContent = h%3===0 ? `${h}` : '';
-      if(h%3!==0) lbl.style.color='transparent';
+      lbl.textContent = `${h}`;
       col.appendChild(bar); col.appendChild(lbl);
       wrap.appendChild(col);
     });
@@ -526,7 +525,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#1e293
 
       <!-- 本月趨勢 -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:8px;" id="monthTitle">本月每日點擊趨勢</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
+          <div class="section-title" id="monthTitle">本月每日點擊趨勢</div>
+          <div style="font-size:0.68rem;color:#94a3b8;">（每次按下按鈕算1次；點左上方日期可查歷史紀錄）</div>
+        </div>
         <div id="monthlyChart"></div>
       </div>
 
