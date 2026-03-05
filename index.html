@@ -535,13 +535,13 @@ background-size:28px 28px;min-height:500px;}
         <div id="studentList"></div>
       </div>
       <!-- 已抽名單 -->
-      <div style="border-top:1.5px solid #e2e8f0;padding:8px 10px 6px;">
+      <div style="border-top:1.5px solid #e2e8f0;padding:6px 10px 8px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
           <span style="font-size:0.72rem;font-weight:700;color:#64748b;letter-spacing:0.5px;">📋 已抽過</span>
           <button id="clearDrawnBtn" style="font-size:0.65rem;padding:1px 7px;border-radius:5px;border:1px solid #fca5a5;background:#fff5f5;color:#ef4444;cursor:pointer;">清除</button>
         </div>
-        <div id="drawnList" style="display:flex;flex-wrap:wrap;gap:4px;min-height:22px;">
-          <span id="drawnEmpty" style="font-size:0.68rem;color:#cbd5e1;">（尚未抽籤）</span>
+        <div id="drawnList" style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;">
+          <span id="drawnEmpty" style="font-size:0.68rem;color:#cbd5e1;grid-column:span 4;">（尚未抽籤）</span>
         </div>
       </div><!-- /已抽名單容器 -->
       </div><!-- /panel-body -->
@@ -2174,18 +2174,17 @@ class ClassroomApp {
       .map(sid => this._students[sid]).filter(Boolean)
       .sort((a,b) => a.seatNumber - b.seatNumber);
     sorted.forEach(st => {
-      const tag = document.createElement('div');
-      tag.style.cssText=`display:flex;flex-direction:column;align-items:center;gap:1px;
-        padding:4px 6px;border-radius:8px;min-width:34px;
-        background:${st.gender==='male'?'#dbeafe':'#fee2e2'};
-        border:1.5px solid ${st.gender==='male'?'#93c5fd':'#fca5a5'};`;
-      tag.innerHTML=
-        `<span style="font-size:0.9rem;font-weight:800;line-height:1;
-          color:${st.gender==='male'?'#1e40af':'#991b1b'};">${st.seatNumber}</span>`+
-        `<span style="font-size:0.6rem;font-weight:600;line-height:1.2;
-          color:${st.gender==='male'?'#3b82f6':'#ef4444'};max-width:34px;
-          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${st.name}</span>`;
-      container.appendChild(tag);
+      const chip = document.createElement('div');
+      chip.className = 's-chip ' + (st.gender==='male' ? 's-chip-male' : 's-chip-female');
+      chip.innerHTML = `<div class="sn">${st.seatNumber}</div><div class="nm">${st.name.length>3?st.name.slice(0,3):st.name}</div>`;
+      chip.style.opacity = '0.82';
+      chip.style.position = 'relative';
+      // 已抽標記
+      const badge = document.createElement('div');
+      badge.style.cssText = 'position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#ef4444;';
+      chip.appendChild(badge);
+      chip.title = `${st.seatNumber}號 ${st.name}（已抽）`;
+      container.appendChild(chip);
     });
   }
 
