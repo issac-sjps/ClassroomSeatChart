@@ -231,23 +231,50 @@
   }
 
   async function loadAllUsers() {
-    const snap = await getDocs(collection(db,'teachers')).catch(()=>({docs:[]}));
-    document.getElementById('registeredUsers').textContent = snap.docs.length;
+    const [teachSnap, presSnap] = await Promise.all([
+      getDocs(collection(db,'teachers')).catch(()=>({docs:[]})),
+      getDocs(collection(db,'presence')).catch(()=>({docs:[]})),
+    ]);
+    // uid -> presence 對照
+    const presMap = {};
+    presSnap.docs.forEach(d=>{ presMap[d.id]=d.data(); });
+
+    document.getElementById('registeredUsers').textContent = teachSnap.docs.length;
+
+    // 平均滯留時間
+    let totalDur=0, durCount=0;
+    presSnap.docs.forEach(d=>{
+      const p=d.data();
+      if(p.sessionStart && p.lastSeen && p.lastSeen>p.sessionStart){
+        totalDur += p.lastSeen - p.sessionStart;
+        durCount++;
+      }
+    });
+    const avgEl = document.getElementById('avgSessionTime');
+    if(avgEl) avgEl.textContent = durCount>0 ? fmt(Math.round(totalDur/durCount)) : '--';
+
     const list = document.getElementById('allUsersList');
     list.innerHTML='';
-    snap.docs.forEach(d=>{
+    const now=Date.now();
+    teachSnap.docs.forEach(d=>{
       const data=d.data();
+      const pres=presMap[d.id]||{};
+      const displayName = data.customDisplayName||pres.name||data.displayName||pres.email||data.email||d.id;
+      const email = data.email||pres.email||'';
       const classCount = Object.keys(data.classes||{}).length;
+      const isOnline = pres.lastSeen && now-pres.lastSeen < 90000;
       const row=document.createElement('div');
-      row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;';
+      row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9;';
       row.innerHTML=`
-        <div>
-          <div style="font-size:0.82rem;font-weight:600;color:#1e293b;">${data.displayName||data.email||d.id}</div>
-          <div style="font-size:0.68rem;color:#94a3b8;">${data.email||''}</div>
+        <div class="user-dot ${isOnline?'dot-on':'dot-off'}" style="flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.82rem;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayName}</div>
+          <div style="font-size:0.68rem;color:#94a3b8;">${email}</div>
         </div>
-        <div style="font-size:0.72rem;color:#6366f1;font-weight:700;">${classCount} 班</div>`;
+        <div style="font-size:0.72rem;color:#6366f1;font-weight:700;white-space:nowrap;">${classCount} 班</div>`;
       list.appendChild(row);
     });
+    if(!teachSnap.docs.length) list.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;">尚無資料</div>';
   }
 
   async function loadMonthlyChart() {
@@ -372,7 +399,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#1e293
   <div class="login-card">
     <div class="login-icon">🔐</div>
     <div class="login-title">管理員後台</div>
-    <div class="login-sub">僅限 issac@sjps.kh.edu.tw 登入</div>
+    <div class="login-sub">僅限 <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5b3228283a381b28312b28753033753e3f2e752f2c">[email&#160;protected]</a> 登入</div>
     <button class="login-btn" id="loginBtn">
       <svg width="18" height="18" viewBox="0 0 48 48">
         <path fill="#FFC107" d="M43.6 20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.2-2.7-.4-4z"/>
@@ -430,6 +457,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#1e293
             <div class="stat-label">今日活躍</div>
           </div>
         </div>
+        <div style="margin-top:8px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:0.72rem;color:#166534;font-weight:700;">⏱ 平均滯留時間</div>
+          <div style="font-size:1rem;font-weight:800;color:#15803d;" id="avgSessionTime">--</div>
+        </div>
       </div>
 
       <div class="card" style="padding:12px;">
@@ -477,13 +508,4 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#1e293
 
       <!-- 使用者詳細活動 -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:8px;">使用者活動明細（選定日）</div>
-        <div id="userActivity"></div>
-      </div>
-
-    </main>
-  </div>
-</div>
-
-</body>
-</html>
+        <div class="section-title" style="margin-bottom:8px;">使用者活動�
