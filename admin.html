@@ -202,19 +202,27 @@
     const container = document.getElementById('hourChart');
     container.innerHTML='';
     const max = Math.max(...hourCount, 1);
+    const CHART_H = 80;
+    // 外層改用 position:relative 加固定高度，label 放在底部
+    const wrap = document.createElement('div');
+    wrap.style.cssText='display:flex;align-items:flex-end;gap:1px;height:'+(CHART_H+22)+'px;position:relative;';
     hourCount.forEach((v, h)=>{
       const col = document.createElement('div');
-      col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;';
+      col.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:flex-end;flex:1;height:100%;';
       const bar = document.createElement('div');
-      bar.style.cssText=`width:100%;border-radius:4px 4px 0 0;background:${v?'#6366f1':'#e2e8f0'};
-        height:${Math.max(2,Math.round(v/max*100))}px;transition:height 0.3s;`;
+      const bh = Math.max(v?3:1, Math.round(v/max*CHART_H));
+      bar.style.cssText=`width:100%;border-radius:3px 3px 0 0;background:${v?'#6366f1':'#e2e8f0'};
+        height:${bh}px;transition:height 0.3s;flex-shrink:0;`;
       bar.title=`${h}:00 — ${v}次`;
       const lbl = document.createElement('div');
-      lbl.style.cssText='font-size:0.55rem;color:#94a3b8;';
-      lbl.textContent = h%6===0?`${h}h`:'';
+      lbl.style.cssText='font-size:0.5rem;color:#94a3b8;text-align:center;line-height:1.2;flex-shrink:0;height:18px;display:flex;align-items:flex-end;justify-content:center;';
+      // 每3小時顯示一次（0,3,6,9...），奇數用細一點
+      lbl.textContent = h%3===0 ? `${h}` : '';
+      if(h%3!==0) lbl.style.color='transparent';
       col.appendChild(bar); col.appendChild(lbl);
-      container.appendChild(col);
+      wrap.appendChild(col);
     });
+    container.appendChild(wrap);
   }
 
   function renderUserActivity(userSessions) {
@@ -259,7 +267,10 @@
     teachSnap.docs.forEach(d=>{
       const data=d.data();
       const pres=presMap[d.id]||{};
-      const displayName = data.customDisplayName||pres.name||data.displayName||pres.email||data.email||d.id;
+      // 名稱優先序：自訂名稱 > Google名稱(presence) > teachers存的 > email前綴 > 縮短UID
+      const rawName = data.customDisplayName||pres.name||data.displayName||'';
+      const emailStr = data.email||pres.email||'';
+      const displayName = rawName || (emailStr ? emailStr.split('@')[0] : d.id.slice(0,8)+'...');
       const email = data.email||pres.email||'';
       const classCount = Object.keys(data.classes||{}).length;
       const isOnline = pres.lastSeen && now-pres.lastSeen < 90000;
@@ -291,23 +302,36 @@
   function renderMonthlyChart(data, monthPrefix) {
     const container = document.getElementById('monthlyChart');
     container.innerHTML='';
-    const days = Object.keys(data).sort();
-    if(!days.length){container.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;font-size:0.82rem;">本月尚無資料</div>';return;}
-    const max = Math.max(...Object.values(data),1);
-    days.forEach(d=>{
-      const v=data[d];
-      const col=document.createElement('div');
-      col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:18px;';
-      const bar=document.createElement('div');
-      bar.style.cssText=`width:80%;border-radius:4px 4px 0 0;background:${v?'#10b981':'#e2e8f0'};
-        height:${Math.max(2,Math.round(v/max*80))}px;`;
-      bar.title=`${d}: ${v}次`;
-      const lbl=document.createElement('div');
-      lbl.style.cssText='font-size:0.5rem;color:#94a3b8;';
-      lbl.textContent=d.slice(8);
-      col.appendChild(bar); col.appendChild(lbl);
-      container.appendChild(col);
+    // 補齊當月所有天
+    const [y,m] = monthPrefix.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const allDays = Array.from({length:daysInMonth},(_,i)=>{
+      const dd=String(i+1).padStart(2,'0');
+      return `${monthPrefix}-${dd}`;
     });
+    const vals = allDays.map(d=>data[d]||0);
+    const max = Math.max(...vals, 1);
+    const CHART_H = 80;
+    if(!allDays.length){container.innerHTML='<div style="color:#94a3b8;text-align:center;padding:1rem;font-size:0.82rem;">本月尚無資料</div>';return;}
+    const wrap = document.createElement('div');
+    wrap.style.cssText='display:flex;align-items:flex-end;gap:2px;height:'+(CHART_H+20)+'px;';
+    allDays.forEach((d,i)=>{
+      const v=vals[i];
+      const col=document.createElement('div');
+      col.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:flex-end;flex:1;height:100%;min-width:0;';
+      const bar=document.createElement('div');
+      const bh = v ? Math.max(4, Math.round(v/max*CHART_H)) : 2;
+      bar.style.cssText=`width:100%;border-radius:3px 3px 0 0;background:${v?'#10b981':'#e2e8f0'};
+        height:${bh}px;flex-shrink:0;cursor:default;`;
+      bar.title=`${d}: ${v} 次`;
+      const lbl=document.createElement('div');
+      lbl.style.cssText='font-size:0.48rem;color:#94a3b8;text-align:center;flex-shrink:0;height:16px;line-height:16px;overflow:hidden;';
+      const day=parseInt(d.slice(8));
+      lbl.textContent = (day===1||day%5===0) ? day : '';
+      col.appendChild(bar); col.appendChild(lbl);
+      wrap.appendChild(col);
+    });
+    container.appendChild(wrap);
     document.getElementById('monthTitle').textContent = monthPrefix + ' 每日點擊趨勢';
   }
 
