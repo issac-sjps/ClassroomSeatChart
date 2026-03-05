@@ -131,9 +131,20 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f4f8;color:#1e293b;heig
 .main-content{display:flex;flex:1;overflow:hidden;}
 
 /* ── Student Panel ── */
-.student-panel{width:240px;flex-shrink:0;background:linear-gradient(180deg,#faf5ff 0%,#f3e8ff 100%);border-right:2px solid #d8b4fe;display:flex;flex-direction:column;overflow:hidden;}
-.panel-hdr{padding:0.75rem 0.875rem;border-bottom:2px solid #d8b4fe;background:linear-gradient(135deg,#7c3aed,#6d28d9);display:flex;align-items:center;justify-content:space-between;}
-.panel-title{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:white;}
+.student-panel{width:240px;flex-shrink:0;background:linear-gradient(180deg,#faf5ff 0%,#f3e8ff 100%);border-right:2px solid #d8b4fe;display:flex;flex-direction:column;overflow:hidden;transition:width 0.25s;}
+.student-panel.collapsed{width:36px;}
+.student-panel.collapsed .panel-body{display:none;}
+.panel-hdr{padding:0.5rem 0.875rem;border-bottom:2px solid #d8b4fe;background:linear-gradient(135deg,#7c3aed,#6d28d9);display:flex;align-items:center;justify-content:space-between;gap:4px;flex-shrink:0;}
+.panel-title{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:white;white-space:nowrap;}
+.filter-chip{padding:1px 7px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.35);background:rgba(255,255,255,0.15);
+  color:white;font-size:0.65rem;font-weight:700;cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.filter-chip:hover{background:rgba(255,255,255,0.28);}
+.filter-chip.hidden-filter{background:rgba(0,0,0,0.25);border-color:rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.5);text-decoration:line-through;}
+.panel-collapse-btn{width:22px;height:22px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);
+  background:rgba(255,255,255,0.15);color:white;font-size:0.8rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s;}
+.panel-collapse-btn:hover{background:rgba(255,255,255,0.3);}
 #studentList{flex:1;overflow-y:auto;padding:0.625rem;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;align-content:start;}
 #studentList::-webkit-scrollbar{width:4px;}
 #studentList::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
@@ -508,14 +519,17 @@ background-size:28px 28px;min-height:500px;}
   <div class="main-content">
 
     <!-- Student Panel -->
-    <div class="student-panel">
+    <div class="student-panel" id="studentPanel">
       <div class="panel-hdr">
         <span class="panel-title">學生名單</span>
-        <div style="display:flex;gap:5px;">
-          <button class="btn btn-outline btn-sm" id="editStudentsBtn">編輯</button>
-          <button class="btn btn-outline btn-sm" id="exportBtn">匯出</button>
+        <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;">
+          <button class="filter-chip" id="filterMale" title="點擊隱藏男生">🟦男</button>
+          <button class="filter-chip" id="filterFemale" title="點擊隱藏女生">🟥女</button>
+          <button class="filter-chip" id="filterEmpty" title="點擊隱藏空位">⬜空</button>
+          <button class="panel-collapse-btn" id="panelCollapseBtn" title="收合名單">◀</button>
         </div>
       </div>
+      <div class="panel-body" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
       <div id="studentList"></div>
       <!-- 已抽名單 -->
       <div style="border-top:1.5px solid #e2e8f0;padding:8px 10px 6px;">
@@ -911,13 +925,18 @@ class ClassroomApp {
     this.currentClassId = null;
     this.currentMode = 'normal'; // normal | group | exam | free
     this.isStudentView = false;
-    this.seatSize = 100;       // px  (動態調整)
+    const _isIpad = /iPad/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    this.seatSize = _isIpad ? 148 : 100; // iPad預設XL，其他預設normal
     this.editingStudentId = null;
     this.currentSettingsSid = null;
     this.currentGroupNum = null;
     this.renamingClassId = null;
     this.flashIntervals = [];
     this.selectedStudents = [];
+    this.hideMale   = false;
+    this.hideFemale = false;
+    this.hideEmpty  = false;
+    this.panelCollapsed = false;
     this.isLotteryRunning = false;
     this.timerInterval = null;
     this.timerRemaining = 0;
@@ -976,6 +995,10 @@ class ClassroomApp {
       }
     });
     this._bindEvents();
+    // 同步 slider 初始值和 preset active（iPad 為 148，其他為 100）
+    const slider = document.getElementById('seatSizeSlider');
+    if (slider) slider.value = this.seatSize;
+    this._syncSizePresets();
   }
 
   // ── Firebase ────────────────────────────────────────────────
@@ -1231,6 +1254,10 @@ class ClassroomApp {
     container.innerHTML = '';
     for (let i=1;i<=40;i++) {
       const st = Object.values(this._students).find(s=>s.seatNumber===i);
+      // 過濾邏輯
+      if (!st && this.hideEmpty) continue;
+      if (st && st.gender==='male'   && this.hideMale)   continue;
+      if (st && st.gender==='female' && this.hideFemale) continue;
       const chip = document.createElement('div');
       if (st) {
         const hw = this._hwCount(st.id);
@@ -2139,15 +2166,21 @@ class ClassroomApp {
       container.innerHTML='<span id="drawnEmpty" style="font-size:0.68rem;color:#cbd5e1;">（尚未抽籤）</span>';
       return;
     }
-    drawnSids.forEach(sid => {
-      const st = this._students[sid];
-      if (!st) return;
-      const tag = document.createElement('span');
-      tag.style.cssText=`font-size:0.68rem;padding:2px 6px;border-radius:10px;font-weight:600;
+    const sorted = drawnSids
+      .map(sid => this._students[sid]).filter(Boolean)
+      .sort((a,b) => a.seatNumber - b.seatNumber);
+    sorted.forEach(st => {
+      const tag = document.createElement('div');
+      tag.style.cssText=`display:flex;flex-direction:column;align-items:center;gap:1px;
+        padding:4px 6px;border-radius:8px;min-width:34px;
         background:${st.gender==='male'?'#dbeafe':'#fee2e2'};
-        color:${st.gender==='male'?'#1e40af':'#991b1b'};`;
-      tag.textContent=`${st.seatNumber}號`;
-      tag.title=st.name;
+        border:1.5px solid ${st.gender==='male'?'#93c5fd':'#fca5a5'};`;
+      tag.innerHTML=
+        `<span style="font-size:0.9rem;font-weight:800;line-height:1;
+          color:${st.gender==='male'?'#1e40af':'#991b1b'};">${st.seatNumber}</span>`+
+        `<span style="font-size:0.6rem;font-weight:600;line-height:1.2;
+          color:${st.gender==='male'?'#3b82f6':'#ef4444'};max-width:34px;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${st.name}</span>`;
       container.appendChild(tag);
     });
   }
@@ -3057,6 +3090,32 @@ class ClassroomApp {
 
     // Export
     document.getElementById('exportBtn')?.addEventListener('click',()=>this._exportCSV());
+
+    // 學生名單 filter chips
+    const syncFilterChips = () => {
+      document.getElementById('filterMale')?.classList.toggle('hidden-filter',   this.hideMale);
+      document.getElementById('filterFemale')?.classList.toggle('hidden-filter', this.hideFemale);
+      document.getElementById('filterEmpty')?.classList.toggle('hidden-filter',  this.hideEmpty);
+    };
+    document.getElementById('filterMale')?.addEventListener('click',()=>{
+      this.hideMale=!this.hideMale; syncFilterChips(); this._renderStudentList();
+    });
+    document.getElementById('filterFemale')?.addEventListener('click',()=>{
+      this.hideFemale=!this.hideFemale; syncFilterChips(); this._renderStudentList();
+    });
+    document.getElementById('filterEmpty')?.addEventListener('click',()=>{
+      this.hideEmpty=!this.hideEmpty; syncFilterChips(); this._renderStudentList();
+    });
+
+    // 收合名單面板
+    document.getElementById('panelCollapseBtn')?.addEventListener('click',()=>{
+      this.panelCollapsed = !this.panelCollapsed;
+      const panel = document.getElementById('studentPanel');
+      const btn   = document.getElementById('panelCollapseBtn');
+      panel?.classList.toggle('collapsed', this.panelCollapsed);
+      if (btn) btn.textContent = this.panelCollapsed ? '▶' : '◀';
+      if (btn) btn.title = this.panelCollapsed ? '展開名單' : '收合名單';
+    });
 
     // Seat size slider + preset buttons
     document.getElementById('seatSizeSlider')?.addEventListener('input',e=>{
