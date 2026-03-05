@@ -458,7 +458,7 @@ background-size:28px 28px;min-height:500px;}
         🐛 問題回報
       </a>
       <img id="userAvatar" class="user-avatar" src="" alt="">
-      <span id="userName" class="user-name"></span>
+      <span id="userName" class="user-name" title="點兩下修改顯示名稱" style="cursor:pointer;" ondblclick="app._editDisplayName()"></span>
       <button class="signout-btn" id="signoutBtn">登出</button>
     </div>
   </header>
@@ -1074,8 +1074,11 @@ class ClassroomApp {
         await this._save();
       }
       this.currentClassId = this.data.classOrder[0] || Object.keys(this.data.classes)[0] || null;
+      // 確保 customDisplayName 存在（首次登入用 Google 名稱）
+      if (!this.data.customDisplayName) this.data.customDisplayName = this.user.displayName || '';
       this._renderTabs();
       this._renderAll();
+      this._updateNameDisplay();
     } catch(e) {
       console.error(e);
       this._setSyncStatus('error');
@@ -1092,9 +1095,27 @@ class ClassroomApp {
     this._setSyncStatus('syncing');
     try {
       const ref = window._fsDoc(window._db, 'teachers', this.user.uid);
-      await window._fsSetDoc(ref, { ...this.data, uid: this.user.uid, updatedAt: Date.now() });
+      const displayName = this.data.customDisplayName || this.user.displayName || '';
+      await window._fsSetDoc(ref, { ...this.data, uid: this.user.uid, email: this.user.email, displayName, updatedAt: Date.now() });
       this._setSyncStatus('synced');
     } catch(e) { this._setSyncStatus('error'); }
+  }
+
+  _updateNameDisplay() {
+    const name = this.data?.customDisplayName || this.user?.displayName || this.user?.email || '';
+    const el = document.getElementById('userName');
+    if (el) el.textContent = name;
+  }
+
+  _editDisplayName() {
+    const current = this.data.customDisplayName || this.user.displayName || '';
+    const newName = prompt('修改顯示名稱：', current);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) { alert('名稱不能為空'); return; }
+    this.data.customDisplayName = trimmed;
+    this._updateNameDisplay();
+    this._save();
   }
 
   _setSyncStatus(s) {
