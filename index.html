@@ -131,9 +131,10 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f4f8;color:#1e293b;heig
 .main-content{display:flex;flex:1;overflow:hidden;}
 
 /* ── Student Panel ── */
-.student-panel{width:240px;flex-shrink:0;background:linear-gradient(180deg,#faf5ff 0%,#f3e8ff 100%);border-right:2px solid #d8b4fe;display:flex;flex-direction:column;overflow:hidden;transition:width 0.25s;}
-.student-panel.collapsed{width:36px;}
-.student-panel.collapsed .panel-body{display:none;}
+.student-panel{width:240px;flex-shrink:0;background:linear-gradient(180deg,#faf5ff 0%,#f3e8ff 100%);border-right:2px solid #d8b4fe;display:flex;flex-direction:column;overflow:hidden;}
+/* 學生 grid 捲起 */
+#studentListWrap{overflow:hidden;transition:max-height 0.3s ease, opacity 0.25s ease;max-height:600px;opacity:1;}
+#studentListWrap.list-collapsed{max-height:0;opacity:0;}
 .panel-hdr{padding:0.5rem 0.875rem;border-bottom:2px solid #d8b4fe;background:linear-gradient(135deg,#7c3aed,#6d28d9);display:flex;align-items:center;justify-content:space-between;gap:4px;flex-shrink:0;}
 .panel-title{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:white;white-space:nowrap;}
 .filter-chip{padding:1px 7px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.35);background:rgba(255,255,255,0.15);
@@ -526,11 +527,13 @@ background-size:28px 28px;min-height:500px;}
           <button class="filter-chip" id="filterMale" title="點擊隱藏男生">🟦男</button>
           <button class="filter-chip" id="filterFemale" title="點擊隱藏女生">🟥女</button>
           <button class="filter-chip" id="filterEmpty" title="點擊隱藏空位">⬜空</button>
-          <button class="panel-collapse-btn" id="panelCollapseBtn" title="收合名單">◀</button>
+          <button class="panel-collapse-btn" id="panelCollapseBtn" title="收合學生名單">▲</button>
         </div>
       </div>
       <div class="panel-body" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
-      <div id="studentList"></div>
+      <div id="studentListWrap">
+        <div id="studentList"></div>
+      </div>
       <!-- 已抽名單 -->
       <div style="border-top:1.5px solid #e2e8f0;padding:8px 10px 6px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
@@ -3108,14 +3111,14 @@ class ClassroomApp {
       this.hideEmpty=!this.hideEmpty; syncFilterChips(); this._renderStudentList();
     });
 
-    // 收合名單面板
+    // 收合學生名單 grid（向上捲起，保留已抽過）
     document.getElementById('panelCollapseBtn')?.addEventListener('click',()=>{
       this.panelCollapsed = !this.panelCollapsed;
-      const panel = document.getElementById('studentPanel');
-      const btn   = document.getElementById('panelCollapseBtn');
-      panel?.classList.toggle('collapsed', this.panelCollapsed);
-      if (btn) btn.textContent = this.panelCollapsed ? '▶' : '◀';
-      if (btn) btn.title = this.panelCollapsed ? '展開名單' : '收合名單';
+      const wrap = document.getElementById('studentListWrap');
+      const btn  = document.getElementById('panelCollapseBtn');
+      wrap?.classList.toggle('list-collapsed', this.panelCollapsed);
+      if (btn) btn.textContent = this.panelCollapsed ? '▼' : '▲';
+      if (btn) btn.title = this.panelCollapsed ? '展開學生名單' : '收合學生名單';
     });
 
     // Seat size slider + preset buttons
