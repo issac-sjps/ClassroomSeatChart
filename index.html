@@ -522,7 +522,9 @@ background-size:28px 28px;min-height:500px;}
     <!-- Student Panel -->
     <div class="student-panel" id="studentPanel">
       <div class="panel-hdr">
-        <span class="panel-title">學生名單</span>
+        <span class="panel-title" id="studentListTitle"
+          style="cursor:pointer;text-decoration:underline dotted rgba(255,255,255,0.5);letter-spacing:0.08em;"
+          title="點擊開啟批次匯入名單">學生名單</span>
         <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;">
           <button class="filter-chip" id="filterMale" title="點擊隱藏男生">🟦男</button>
           <button class="filter-chip" id="filterFemale" title="點擊隱藏女生">🟥女</button>
@@ -3032,6 +3034,12 @@ class ClassroomApp {
 
     // Edit Student
     document.getElementById('editStudentsBtn')?.addEventListener('click',()=>this._showBulkEdit());
+    // 點「學生名單」標題 → 直接開批次匯入 tab
+    document.getElementById('studentListTitle')?.addEventListener('click',()=>{
+      this._showBulkEdit();
+      // 自動切到匯入 tab
+      setTimeout(()=>this._switchBulkTab('import'), 50);
+    });
     document.getElementById('saveStudentBtn')?.addEventListener('click',()=>this._saveStudent());
     document.getElementById('deleteStudentBtn')?.addEventListener('click',()=>this._deleteStudent());
     document.getElementById('cancelEditStudent')?.addEventListener('click',()=>{
