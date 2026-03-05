@@ -551,6 +551,12 @@ background-size:28px 28px;min-height:500px;}
     <div class="classroom-panel">
       <div class="classroom-toolbar">
         <span class="mode-label" id="modeLabel">一般座位模式</span>
+        <!-- Font Size Control -->
+        <span style="font-size:0.72rem;color:#92400e;font-weight:600;">字型</span>
+        <input type="number" id="fontSizeInput" value="100" min="60" max="180"
+          style="width:46px;padding:3px 5px;border:1.5px solid #e2e8f0;border-radius:6px;text-align:center;font-size:0.8rem;color:#1e293b;background:white;"
+          title="座位文字大小（%，預設100）">
+        <span style="font-size:0.68rem;color:#92400e;">%</span>
         <!-- Seat Size Buttons -->
         <span style="font-size:0.72rem;color:#92400e;font-weight:600;">座位大小</span>
         <div style="display:flex;gap:3px;">
@@ -940,6 +946,7 @@ class ClassroomApp {
     this.hideMale   = false;
     this.hideFemale = false;
     this.hideEmpty  = false;
+    this.fontScale  = 100; // 字體縮放 % (100=預設比例)
     this.panelCollapsed = false;
     this.isLotteryRunning = false;
     this.timerInterval = null;
@@ -1002,6 +1009,8 @@ class ClassroomApp {
     // 同步 slider 初始值和 preset active（iPad 為 148，其他為 100）
     const slider = document.getElementById('seatSizeSlider');
     if (slider) slider.value = this.seatSize;
+    const fInput = document.getElementById('fontSizeInput');
+    if (fInput) fInput.value = this.fontScale;
     this._syncSizePresets();
   }
 
@@ -1734,8 +1743,9 @@ class ClassroomApp {
         // 性別底色
         el.classList.add(st.gender === 'male' ? 'seat-male' : 'seat-female');
         const hw = this._hwCount(st.id);
-        const nameSz = Math.max(10, Math.round(sz*0.13));
-        const numSz  = Math.max(9,  Math.round(sz*0.11));
+        const fs = (this.fontScale||100)/100;
+        const nameSz = Math.max(8, Math.round(sz*0.13*fs));
+        const numSz  = Math.max(7, Math.round(sz*0.11*fs));
         el.innerHTML = `
           <div class="seat-no" style="font-size:${numSz}px;">${st.seatNumber}</div>
           <div class="seat-nm" style="font-size:${nameSz}px;">${st.name.length>4?st.name.slice(0,4):st.name}</div>
@@ -1844,8 +1854,9 @@ class ClassroomApp {
     el.style.width = sz+'px';
     el.style.height = Math.round(sz*0.65)+'px';
     const hw = this._hwCount(st.id);
-    const nameSz = Math.max(10, Math.round(sz*0.13));
-    const numSz  = Math.max(9,  Math.round(sz*0.11));
+    const _fs = (this.fontScale||100)/100;
+    const nameSz = Math.max(8, Math.round(sz*0.13*_fs));
+    const numSz  = Math.max(7, Math.round(sz*0.11*_fs));
     el.innerHTML = `
       <div class="seat-no" style="font-size:${numSz}px;color:#7c3aed;">${st.seatNumber}</div>
       <div class="seat-nm" style="font-size:${nameSz}px;">${st.name.length>4?st.name.slice(0,4):st.name}</div>
@@ -3139,6 +3150,17 @@ class ClassroomApp {
       wrap?.classList.toggle('list-collapsed', this.panelCollapsed);
       if (btn) btn.textContent = this.panelCollapsed ? '▼' : '▲';
       if (btn) btn.title = this.panelCollapsed ? '展開學生名單' : '收合學生名單';
+    });
+
+    // Font size input
+    document.getElementById('fontSizeInput')?.addEventListener('change',e=>{
+      const v=parseInt(e.target.value)||100;
+      this.fontScale = Math.max(60, Math.min(180, v));
+      e.target.value = this.fontScale;
+      this._renderSeats();
+    });
+    document.getElementById('fontSizeInput')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){ e.target.blur(); }
     });
 
     // Seat size slider + preset buttons
