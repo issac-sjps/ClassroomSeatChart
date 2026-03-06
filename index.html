@@ -2650,14 +2650,52 @@ class ClassroomApp {
 
   // ── Random Seating ────────────────────────────────────────────
   _randomSeating() {
-    if(!confirm('確定隨機安排座位？'))return;
-    const posCount = {normal:30,group:30,exam:36,free:0,scilab:30,computer:30};
-    const maxPos = posCount[this.currentMode] || 30;
-    if(maxPos===0){alert('自由座位請直接拖曳安排');return;}
-    const positions=Array.from({length:maxPos},(_,i)=>i).sort(()=>Math.random()-0.5);
-    const students=Object.values(this._students).sort(()=>Math.random()-0.5);
+    if(!confirm('確定隨機安排座位？（男女盡量平均分配）'))return;
+    if(this.currentMode==='free'){alert('自由座位請直接拖曳安排');return;}
+
+    // ── 計算各模式的有效座位 key ──
+    const cls = this._cls;
+    let positions = [];
+    if(this.currentMode==='normal'||this.currentMode==='exam'){
+      const total = this.currentMode==='exam'?36:30;
+      positions = Array.from({length:total},(_,i)=>i);
+    } else if(this.currentMode==='group'||this.currentMode==='scilab'){
+      // g*8+s，每組人數從 seatCounts 取
+      const countsKey = this.currentMode==='scilab'?'scilabSeatCounts':'groupSeatCounts';
+      for(let g=0;g<6;g++){
+        const n = (cls[countsKey]||{})[g]??5;
+        for(let s=0;s<n;s++) positions.push(g*8+s);
+      }
+    } else if(this.currentMode==='computer'){
+      const layout = cls.computerLayout||'v3';
+      const cfgs = {v3:{cols:3,rows:10},h3:{cols:10,rows:3},v4:{cols:4,rows:8},h4:{cols:8,rows:4}};
+      const cfg = cfgs[layout];
+      for(let col=0;col<cfg.cols;col++)
+        for(let row=0;row<cfg.rows;row++)
+          positions.push(col*cfg.rows+row);
+    }
+
+    // ── 男女交錯平均分配 ──
+    const males   = Object.values(this._students).filter(s=>s.gender==='male').sort(()=>Math.random()-0.5);
+    const females = Object.values(this._students).filter(s=>s.gender==='female').sort(()=>Math.random()-0.5);
+    // 把位置先洗牌，再依奇偶分成「男生優先」和「女生優先」兩組
+    const shuffled = [...positions].sort(()=>Math.random()-0.5);
+    const mPos=[], fPos=[];
+    shuffled.forEach((p,i)=>{ if(i%2===0) mPos.push(p); else fPos.push(p); });
+    // 若男多女少或反之，剩餘位置補給人多的那邊
+    const allPos = [...mPos, ...fPos];
     const seats={};
-    students.forEach((st,i)=>{if(i<positions.length)seats[positions[i]]=st.id;});
+    let mi=0, fi=0, allI=0;
+    // 先把男女各自排到自己的位置
+    males.forEach(st=>{  if(mi<mPos.length) seats[mPos[mi++]]=st.id; });
+    females.forEach(st=>{ if(fi<fPos.length) seats[fPos[fi++]]=st.id; });
+    // 溢出的學生（人數超過分配格）排到剩餘空位
+    const usedPos = new Set(Object.keys(seats).map(Number));
+    const spare = shuffled.filter(p=>!usedPos.has(p));
+    let si=0;
+    [...males.slice(mi), ...females.slice(fi)].forEach(st=>{
+      if(si<spare.length) seats[spare[si++]]=st.id;
+    });
     this._setSeats(seats);this._scheduleSave();this._renderSeats();
   }
 
