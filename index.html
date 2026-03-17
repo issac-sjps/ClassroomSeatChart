@@ -2231,26 +2231,34 @@ class ClassroomApp {
 
   _startTimer() {
     const isStopwatch = this.timerMode === 'stopwatch';
+    let totalSec = 0;
     if (!isStopwatch) {
       const h=parseInt(document.getElementById('timerH').value)||0;
       const m=parseInt(document.getElementById('timerM').value)||0;
       const s=parseInt(document.getElementById('timerS').value)||0;
-      const total=h*3600+m*60+s;
-      if(!total){alert('請設定有效時間');return;}
-      this.timerRemaining=total;
-    } else {
-      this.timerElapsed=0;
+      totalSec=h*3600+m*60+s;
+      if(!totalSec){alert('請設定有效時間');return;}
     }
     this.timerPaused=false;
     this._hideModal('timerModal');
 
-    // 控制列小顯示（保留）
+    // ── 使用 Date.now() 時間戳，切換分頁也不會停 ──
+    // timerDeadline：倒數到期的絕對時間（ms）
+    // timerStartedAt：正計時開始的時間
+    // timerPausedAt：暫停時記錄剩餘秒數
+    if(isStopwatch){
+      this.timerStartedAt = Date.now();
+      this.timerPausedRemaining = null;
+    } else {
+      this.timerDeadline = Date.now() + totalSec*1000;
+      this.timerPausedRemaining = null;
+    }
+
     const disp=document.getElementById('timerDisplay');
     const pauseBtn=document.getElementById('pauseTimerBtn');
     const stopBtn=document.getElementById('stopTimerBtn');
     disp.style.display=''; pauseBtn.style.display=''; stopBtn.style.display='';
 
-    // 浮動大視窗
     const float=document.getElementById('floatTimer');
     const floatDisp=document.getElementById('floatTimerDisplay');
     const floatLabel=document.getElementById('floatTimerLabel');
@@ -2258,40 +2266,43 @@ class ClassroomApp {
     float.style.display='';
 
     const upd=()=>{
-      let txt, isUrgent=false;
+      if(this.timerPaused) return;
+      let sec, isUrgent=false;
       if(isStopwatch){
-        txt=this._fmtTime(this.timerElapsed);
+        sec = Math.floor((Date.now()-this.timerStartedAt)/1000);
+        this.timerElapsed = sec;
       } else {
-        txt=this._fmtTime(this.timerRemaining);
-        isUrgent=this.timerRemaining<=10&&this.timerRemaining>0;
+        sec = Math.max(0, Math.round((this.timerDeadline-Date.now())/1000));
+        this.timerRemaining = sec;
+        isUrgent = sec<=10 && sec>0;
       }
+      const txt=this._fmtTime(sec);
       disp.textContent=txt;
       floatDisp.textContent=txt;
       disp.className='timer-display'+(isUrgent?' urgent':'');
       floatDisp.style.color=isUrgent?'#f87171':'white';
       floatDisp.style.animation=isUrgent?'blink 0.5s ease infinite':'';
+
+      if(!isStopwatch && sec<=0){
+        clearInterval(this.timerInterval); this.timerInterval=null;
+        disp.style.display='none'; pauseBtn.style.display='none'; stopBtn.style.display='none';
+        float.style.display='none';
+        this._playAlarm();
+        const sayTime=(i)=>setTimeout(()=>this._speak('時間到囉'),i*1800);
+        sayTime(0);sayTime(1);sayTime(2);
+        this._showModal('timeUpModal');
+      }
     };
     upd();
 
     if(this.timerInterval) clearInterval(this.timerInterval);
-    this.timerInterval=setInterval(()=>{
-      if(!this.timerPaused){
-        if(isStopwatch){
-          this.timerElapsed++;upd();
-        } else {
-          this.timerRemaining--;upd();
-          if(this.timerRemaining<=0){
-            clearInterval(this.timerInterval);this.timerInterval=null;
-            disp.style.display='none'; pauseBtn.style.display='none'; stopBtn.style.display='none';
-            float.style.display='none';
-            this._playAlarm();
-            const sayTime=(i)=>setTimeout(()=>this._speak('時間到囉'),i*1800);
-            sayTime(0);sayTime(1);sayTime(2);
-            this._showModal('timeUpModal');
-          }
-        }
-      }
-    },1000);
+    // 每250ms更新一次（比1秒更精準，補齊切換分頁回來的時差）
+    this.timerInterval=setInterval(upd, 250);
+
+    // 切回分頁時立即補齊顯示
+    if(this._timerVisHandler) document.removeEventListener('visibilitychange', this._timerVisHandler);
+    this._timerVisHandler = ()=>{ if(!document.hidden) upd(); };
+    document.addEventListener('visibilitychange', this._timerVisHandler);
   }
 
   _stopTimer() {
@@ -2322,9 +2333,8 @@ class ClassroomApp {
     document.addEventListener('mouseup',()=>dragging=false);
     // 浮動視窗按鈕
     document.getElementById('floatPauseBtn')?.addEventListener('click',()=>{
-      this.timerPaused=!this.timerPaused;
-      document.getElementById('floatPauseBtn').textContent=this.timerPaused?'繼續':'暫停';
-      document.getElementById('pauseTimerBtn').textContent=this.timerPaused?'繼續':'暫停';
+      // 統一觸發 pauseTimerBtn 的邏輯
+      document.getElementById('pauseTimerBtn')?.click();
     });
     document.getElementById('floatStopBtn')?.addEventListener('click',()=>{
       if(!confirm('確定停止計時器？'))return;
@@ -2998,6 +3008,17 @@ class ClassroomApp {
     });
     document.getElementById('pauseTimerBtn')?.addEventListener('click',()=>{
       this.timerPaused=!this.timerPaused;
+      const isStopwatch = this.timerMode==='stopwatch';
+      if(this.timerPaused){
+        // 記錄暫停瞬間剩餘/已過秒數
+        if(isStopwatch) this.timerPausedRemaining = Math.floor((Date.now()-this.timerStartedAt)/1000);
+        else            this.timerPausedRemaining = Math.max(0,Math.round((this.timerDeadline-Date.now())/1000));
+      } else {
+        // 恢復：重新計算基準時間
+        if(isStopwatch) this.timerStartedAt = Date.now() - this.timerPausedRemaining*1000;
+        else            this.timerDeadline  = Date.now() + this.timerPausedRemaining*1000;
+        this.timerPausedRemaining = null;
+      }
       const t=this.timerPaused?'繼續':'暫停';
       document.getElementById('pauseTimerBtn').textContent=t;
       document.getElementById('floatPauseBtn').textContent=t;
