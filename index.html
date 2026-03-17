@@ -1259,6 +1259,7 @@ class ClassroomApp {
       tab.innerHTML = `
         <span class="drag-handle" title="拖曳排序">⠿</span>
         <span class="tab-name">${cls.name}</span>
+        <span style="font-size:0.68rem;color:#64748b;font-weight:600;background:#f1f5f9;border-radius:8px;padding:1px 6px;line-height:1.6;">${Object.keys(cls.students||{}).length}</span>
         <span class="class-tab-rename" title="修改名稱">✏️</span>
       `;
 
