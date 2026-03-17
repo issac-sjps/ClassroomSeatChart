@@ -502,6 +502,7 @@ background-size:28px 28px;min-height:500px;}
     <div id="classTabs" style="display:flex;align-items:stretch;gap:0;"></div>
     <button class="add-class-btn" id="addClassBtn">＋ 新增班級</button>
     <button class="sort-class-btn" id="sortClassBtn" title="依名稱排序班級">AZ 排序</button>
+    <span style="font-size:0.62rem;color:#94a3b8;white-space:nowrap;margin-left:4px;">雙擊班級名稱可編輯／刪除</span>
     <div class="sync-badge">
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncText">已同步</span>
@@ -2298,7 +2299,22 @@ class ClassroomApp {
       const badge = document.createElement('div');
       badge.style.cssText = 'position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#ef4444;';
       chip.appendChild(badge);
-      chip.title = `${st.seatNumber}號 ${st.name}（已抽）`;
+      chip.title = `${st.seatNumber}號 ${st.name}（雙擊可移出已抽名單）`;
+      // 雙擊移出已抽名單
+      let tt=0;
+      const removeFn = () => {
+        if(!confirm(`將 ${st.seatNumber}號 ${st.name} 移出已抽名單，讓他重新加入抽籤？`)) return;
+        const cls = this.data.classes[this.currentClassId];
+        cls.drawnSids = (cls.drawnSids||[]).filter(id=>id!==st.id);
+        this._scheduleSave();
+        this._renderDrawnList();
+      };
+      chip.addEventListener('dblclick', removeFn);
+      chip.addEventListener('touchend', e=>{
+        const now=Date.now(), d=now-tt;
+        if(d<400&&d>0){e.preventDefault();removeFn();}
+        tt=now;
+      });
       container.appendChild(chip);
     });
   }
