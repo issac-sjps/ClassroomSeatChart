@@ -105,7 +105,17 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f4f8;color:#1e293b;heig
 @keyframes shake{0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-5px);}40%,80%{transform:translateX(5px);}}
 
 /* ── Control Panel ── */
-.ctrl-panel{background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border-bottom:2px solid #bbf7d0;padding:0.6rem 1.25rem;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex-shrink:0;}
+.ctrl-panel{background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border-bottom:2px solid #bbf7d0;padding:0.6rem 1.25rem;display:flex;flex-wrap:nowrap;gap:6px;align-items:center;flex-shrink:0;overflow:visible;position:relative;}
+.mode-dropdown{position:relative;flex-shrink:0;}
+.mode-dropdown-btn{display:flex;align-items:center;gap:5px;padding:0.35rem 0.875rem;border-radius:8px;font-size:0.8rem;font-weight:600;cursor:pointer;background:#3b82f6;color:white;border:1px solid #3b82f6;white-space:nowrap;transition:all 0.15s;}
+.mode-dropdown-btn:hover{background:#2563eb;}
+.mode-dropdown-btn .caret{font-size:0.6rem;transition:transform 0.2s;}
+.mode-dropdown-btn.open .caret{transform:rotate(180deg);}
+.mode-dropdown-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:white;border:1.5px solid #e2e8f0;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.12);z-index:300;min-width:160px;padding:5px;overflow:hidden;}
+.mode-dropdown-menu.open{display:block;}
+.mode-menu-item{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:7px;font-size:0.82rem;font-weight:500;cursor:pointer;color:#374151;transition:all 0.12s;white-space:nowrap;}
+.mode-menu-item:hover{background:#eff6ff;color:#1d4ed8;}
+.mode-menu-item.active{background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#1d4ed8;font-weight:700;}
 .divider{width:1px;height:22px;background:rgba(0,0,0,0.15);margin:0 2px;}
 
 /* ── Buttons ── */
@@ -500,13 +510,21 @@ background-size:28px 28px;min-height:500px;}
 
   <!-- Control Panel -->
   <div class="ctrl-panel">
-    <!-- Modes -->
-    <button class="btn btn-primary active" id="modeNormal">一般座位</button>
-    <button class="btn btn-outline" id="modeGroup">班級小組座位</button>
-    <button class="btn btn-outline" id="modeExam">考試座位</button>
-    <button class="btn btn-outline" id="modeFree">自由座位</button>
-    <button class="btn btn-outline" id="modeSciLab">自然教室</button>
-    <button class="btn btn-outline" id="modeComputer">電腦教室</button>
+    <!-- Modes 下拉抽屜 -->
+    <div class="mode-dropdown" id="modeDropdown">
+      <button class="mode-dropdown-btn" id="modeDropdownBtn">
+        <span id="modeDropdownLabel">📋 一般座位</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="mode-dropdown-menu" id="modeDropdownMenu">
+        <div class="mode-menu-item active" data-mode="normal" id="modeNormal">📋 一般座位</div>
+        <div class="mode-menu-item" data-mode="group"    id="modeGroup">👥 班級小組座位</div>
+        <div class="mode-menu-item" data-mode="exam"     id="modeExam">📝 考試座位</div>
+        <div class="mode-menu-item" data-mode="free"     id="modeFree">🪑 自由座位</div>
+        <div class="mode-menu-item" data-mode="scilab"   id="modeSciLab">🔬 自然教室</div>
+        <div class="mode-menu-item" data-mode="computer" id="modeComputer">🖥️ 電腦教室</div>
+      </div>
+    </div>
     <div class="divider"></div>
     <!-- Views & Scores -->
     <button class="btn btn-view" id="studentViewBtn">👤 學生視角</button>
@@ -2958,31 +2976,54 @@ class ClassroomApp {
     });
     document.getElementById('cancelRename')?.addEventListener('click',()=>this._hideModal('renameClassModal'));
 
-    // Mode buttons
-    const modeMap={modeNormal:'normal',modeGroup:'group',modeExam:'exam',modeFree:'free',modeSciLab:'scilab',modeComputer:'computer'};
+    // Mode 下拉選單
+    const modeIcons={normal:'📋 一般座位',group:'👥 班級小組座位',exam:'📝 考試座位',free:'🪑 自由座位',scilab:'🔬 自然教室',computer:'🖥️ 電腦教室'};
     const modeLabels={normal:'一般座位模式',group:'班級小組座位模式',exam:'考試座位模式',free:'自由座位模式',scilab:'自然教室模式',computer:'電腦教室模式'};
-    Object.entries(modeMap).forEach(([btnId,mode])=>{
-      document.getElementById(btnId)?.addEventListener('click',()=>{
-        this._track('mode_'+mode);
-        this.currentMode=mode;
-        Object.keys(modeMap).forEach(b=>{
-          const el=document.getElementById(b);
-          if(el)el.className=b===btnId?'btn btn-primary active':'btn btn-outline';
-        });
-        document.getElementById('modeLabel').textContent=modeLabels[mode];
-        // 更新小組積分按鈕文字
-        const gsBtn=document.getElementById('showGroupScoresBtn');
-        if(gsBtn){
-          if(mode==='group') gsBtn.textContent='班級小組積分';
-          else if(mode==='scilab') gsBtn.textContent='自然教室積分';
-          else gsBtn.textContent='小組積分';
-        }
-        // 電腦教室版面按鈕顯示/隱藏
-        const compBtns=document.getElementById('computerLayoutBtns');
-        if(compBtns) compBtns.style.display=mode==='computer'?'flex':'none';
-        if(mode==='computer') this._syncComputerLayoutBtns();
-        this._renderSeats();
+    const modeMap={modeNormal:'normal',modeGroup:'group',modeExam:'exam',modeFree:'free',modeSciLab:'scilab',modeComputer:'computer'};
+
+    const switchMode = (mode) => {
+      this._track('mode_'+mode);
+      this.currentMode=mode;
+      // 更新選單 active
+      document.querySelectorAll('.mode-menu-item').forEach(el=>{
+        el.classList.toggle('active', el.dataset.mode===mode);
       });
+      // 更新按鈕標籤
+      const lbl=document.getElementById('modeDropdownLabel');
+      if(lbl) lbl.textContent=modeIcons[mode]||mode;
+      // 關閉選單
+      document.getElementById('modeDropdownMenu')?.classList.remove('open');
+      document.getElementById('modeDropdownBtn')?.classList.remove('open');
+      document.getElementById('modeLabel').textContent=modeLabels[mode];
+      // 小組積分按鈕
+      const gsBtn=document.getElementById('showGroupScoresBtn');
+      if(gsBtn){
+        if(mode==='group') gsBtn.textContent='班級小組積分';
+        else if(mode==='scilab') gsBtn.textContent='自然教室積分';
+        else gsBtn.textContent='小組積分';
+      }
+      const compBtns=document.getElementById('computerLayoutBtns');
+      if(compBtns) compBtns.style.display=mode==='computer'?'flex':'none';
+      if(mode==='computer') this._syncComputerLayoutBtns();
+      this._renderSeats();
+    };
+
+    // 開關選單
+    document.getElementById('modeDropdownBtn')?.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const menu=document.getElementById('modeDropdownMenu');
+      const btn=document.getElementById('modeDropdownBtn');
+      const isOpen=menu.classList.toggle('open');
+      btn.classList.toggle('open',isOpen);
+    });
+    // 點選選項
+    document.querySelectorAll('.mode-menu-item').forEach(el=>{
+      el.addEventListener('click',()=>switchMode(el.dataset.mode));
+    });
+    // 點外面關閉
+    document.addEventListener('click',()=>{
+      document.getElementById('modeDropdownMenu')?.classList.remove('open');
+      document.getElementById('modeDropdownBtn')?.classList.remove('open');
     });
 
     // Student view
