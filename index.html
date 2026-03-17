@@ -1261,20 +1261,19 @@ class ClassroomApp {
       tab.dataset.classId = id;
       tab.innerHTML = `
         <span class="drag-handle" title="拖曳排序">⠿</span>
-        <span class="tab-name">${cls.name}</span>
+        <span class="tab-name" title="點擊切換；雙擊編輯名稱">${cls.name}</span>
         <span style="font-size:0.68rem;color:#64748b;font-weight:600;background:#f1f5f9;border-radius:8px;padding:1px 6px;line-height:1.6;">${Object.keys(cls.students||{}).length}</span>
-        <span class="class-tab-rename" title="修改名稱">✏️</span>
       `;
 
-      // 切換班級
+      // 單擊切換班級
       tab.querySelector('.tab-name').onclick = () => {
         this.currentClassId = id;
         this._renderTabs();
         this._renderAll();
       };
 
-      // 重新命名
-      tab.querySelector('.class-tab-rename').onclick = e => {
+      // 雙擊編輯名稱
+      tab.querySelector('.tab-name').ondblclick = e => {
         e.stopPropagation();
         this.renamingClassId = id;
         document.getElementById('renameClassInput').value = cls.name;
