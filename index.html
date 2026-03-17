@@ -2285,6 +2285,11 @@ class ClassroomApp {
 
       if(!isStopwatch && sec<=0){
         clearInterval(this.timerInterval); this.timerInterval=null;
+        // 移除 visibilitychange 監聽，防止切回分頁再次觸發
+        if(this._timerVisHandler){
+          document.removeEventListener('visibilitychange', this._timerVisHandler);
+          this._timerVisHandler=null;
+        }
         disp.style.display='none'; pauseBtn.style.display='none'; stopBtn.style.display='none';
         float.style.display='none';
         this._playAlarm();
