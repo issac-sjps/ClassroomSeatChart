@@ -1961,6 +1961,7 @@ class ClassroomApp {
 
   // ── Drag & Drop for normal/group/exam ────────────────────────
   _makeDragSeat(el) {
+    el.draggable = true;   // 必須設定才能拖曳
     el.addEventListener('dragstart', e => {
       e.dataTransfer.setData('text/plain', `seat:${el.dataset.position}`);
       el.classList.add('dragging');
