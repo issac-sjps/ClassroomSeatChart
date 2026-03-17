@@ -460,10 +460,10 @@ background-size:28px 28px;min-height:500px;}
         <span class="hstat-lbl">全班</span><span class="hstat-val" id="hstatTotalVal">--</span><span class="hstat-lbl">人</span>
       </div>
       <div class="hstat-chip male">
-        <span class="hstat-lbl">男</span><span class="hstat-val" id="hstatMaleVal">--</span>
+        <span class="hstat-lbl">男</span><span class="hstat-val" id="hstatMaleVal" style="color:#93c5fd;">--</span>
       </div>
       <div class="hstat-chip female">
-        <span class="hstat-lbl">女</span><span class="hstat-val" id="hstatFemaleVal">--</span>
+        <span class="hstat-lbl">女</span><span class="hstat-val" id="hstatFemaleVal" style="color:#fca5a5;">--</span>
       </div>
       <div class="hstat-chip gap" id="hstatGapChip" style="display:none;" title="跳號座號：有座號空缺">
         <span class="hstat-lbl">⚠ 跳號</span><span class="hstat-val" id="hstatGapVal" style="font-size:0.65rem;"></span>
@@ -1209,25 +1209,34 @@ class ClassroomApp {
 
   _renderClassStats() {
     const students = Object.values(this._students);
-    const total  = students.length;
-    const males  = students.filter(s=>s.gender==='male').length;
-    const females= students.filter(s=>s.gender==='female').length;
-    document.getElementById('hstatTotalVal').textContent = total;
-    document.getElementById('hstatMaleVal').textContent  = males;
-    document.getElementById('hstatFemaleVal').textContent= females;
-    // 跳號：找座號1~最大號之間的空缺
-    const seatNums = students.map(s=>s.seatNumber).filter(n=>n>0).sort((a,b)=>a-b);
-    const gaps = [];
-    if(seatNums.length){
-      const max = seatNums[seatNums.length-1];
-      const set = new Set(seatNums);
-      for(let i=1;i<=max;i++) if(!set.has(i)) gaps.push(i);
-    }
+    const total   = students.length;
+    const maleArr = students.filter(s=>s.gender==='male').map(s=>s.seatNumber).sort((a,b)=>a-b);
+    const femaleArr=students.filter(s=>s.gender==='female').map(s=>s.seatNumber).sort((a,b)=>a-b);
+    document.getElementById('hstatTotalVal').textContent  = total;
+    document.getElementById('hstatMaleVal').textContent   = maleArr.length;
+    document.getElementById('hstatFemaleVal').textContent = femaleArr.length;
+
+    // 跳號：男生自己範圍內找、女生自己範圍內找，互不干擾
+    const findGaps = (arr) => {
+      if(arr.length<2) return [];
+      const set=new Set(arr), gaps=[];
+      const min=arr[0], max=arr[arr.length-1];
+      for(let i=min+1;i<max;i++) if(!set.has(i)) gaps.push(i);
+      return gaps;
+    };
+    const mGaps = findGaps(maleArr);
+    const fGaps = findGaps(femaleArr);
+
     const chip = document.getElementById('hstatGapChip');
     const val  = document.getElementById('hstatGapVal');
-    if(gaps.length){
+    if(mGaps.length||fGaps.length){
       chip.style.display='';
-      val.textContent = gaps.join('、');
+      // 男跳號藍色，女跳號紅色
+      const parts = [
+        ...mGaps.map(n=>`<span style="color:#93c5fd;font-weight:800;">${n}</span>`),
+        ...fGaps.map(n=>`<span style="color:#fca5a5;font-weight:800;">${n}</span>`)
+      ].join('<span style="color:rgba(255,255,255,0.5);">、</span>');
+      val.innerHTML = parts;
     } else {
       chip.style.display='none';
     }
