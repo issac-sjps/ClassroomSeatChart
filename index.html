@@ -2820,13 +2820,24 @@ class ClassroomApp {
       parsed.push({ seatNumber: sn, name, gender });
     });
     if (errors.length) { alert('錯誤：\n' + errors.join('\n')); return; }
-    if (!confirm(`確定匯入 ${parsed.length} 名學生？`)) return;
     const cls = this.data.classes[this.currentClassId];
     if (!cls.students) cls.students = {};
+    // 計算覆蓋時會刪掉哪些學生
+    let deleteCount = 0;
     if (overwrite) {
-      Object.keys(cls.students).forEach(k => {
-        if (parsed.some(p => p.seatNumber === cls.students[k].seatNumber)) delete cls.students[k];
-      });
+      const importedSeats = new Set(parsed.map(p=>p.seatNumber));
+      // 現有但不在匯入名單裡的學生 → 會被刪除
+      deleteCount = Object.values(cls.students).filter(s=>!importedSeats.has(s.seatNumber)).length;
+    }
+    const confirmMsg = overwrite && deleteCount>0
+      ? `確定匯入 ${parsed.length} 名學生？
+（將刪除 ${deleteCount} 名不在匯入名單中的學生）`
+      : `確定匯入 ${parsed.length} 名學生？`;
+    if (!confirm(confirmMsg)) return;
+
+    if (overwrite) {
+      // 完全以匯入名單為準：清除所有現有學生，只保留積分/作業記錄
+      cls.students = {};
     }
     parsed.forEach(p => {
       const id = `s${Date.now()}${p.seatNumber}`;
