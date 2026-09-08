@@ -430,14 +430,25 @@ background-size:28px 28px;min-height:500px;}
 .hw-batch-date-row{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
 
 /* ── Matrix fullscreen mode ── */
-#hwStatusBar.hw-fullscreen{position:fixed;inset:0;z-index:9999;background:#fffbeb;padding:28px 36px;flex-direction:column;align-items:stretch;max-height:100vh;overflow-y:auto;}
-#hwStatusBar.hw-fullscreen #hwStatusList{gap:18px;}
-#hwStatusBar.hw-fullscreen .hw-chip-fs{font-size:1.5rem;padding:10px 22px;border-radius:14px;border-width:2px;}
-#hwStatusBar.hw-fullscreen .hw-chip-fs .hw-fs-name{font-size:1.5rem;font-weight:800;}
-#hwStatusBar.hw-fullscreen .hw-chip-fs .hw-fs-seats span{font-size:1.7rem;padding:0 4px;}
 .hw-fs-toggle-btn{background:rgba(146,64,14,0.1);border:1.5px solid #fde68a;color:#92400e;border-radius:8px;padding:3px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;white-space:nowrap;}
 .hw-fs-toggle-btn:hover{background:rgba(146,64,14,0.2);}
-#hwFsCloseBtn{position:fixed;top:20px;right:24px;z-index:10000;background:#92400e;color:white;border:none;border-radius:10px;padding:8px 16px;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+#hwFsTitleRow{display:none;}
+#hwFsGrid{display:none;}
+#hwStatusBar.hw-fullscreen{position:fixed;inset:0;z-index:9999;background:#fffbeb;padding:20px 32px 32px;flex-direction:column;align-items:stretch;max-height:100vh;overflow-y:auto;}
+#hwStatusBar.hw-fullscreen #hwBarLabel,
+#hwStatusBar.hw-fullscreen #hwStatusList,
+#hwStatusBar.hw-fullscreen #hwFsBtn{display:none;}
+#hwStatusBar.hw-fullscreen #hwFsTitleRow{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-shrink:0;}
+#hwFsTitle{font-size:1.6rem;font-weight:900;color:#92400e;}
+#hwFsCloseBtn{background:#92400e;color:white;border:none;border-radius:10px;padding:9px 18px;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+#hwFsCloseBtn:hover{background:#78350f;}
+#hwStatusBar.hw-fullscreen #hwFsGrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
+.hw-fs-card{background:white;border:2px solid #fde68a;border-radius:16px;padding:16px 20px;}
+.hw-fs-card-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:2px dashed #fde68a;}
+.hw-fs-card-title>span:first-child{font-size:1.4rem;font-weight:800;color:#92400e;}
+.hw-fs-card-count{font-size:0.95rem;font-weight:700;color:#d97706;background:#fef3c7;border-radius:20px;padding:3px 12px;}
+.hw-fs-seat-wrap{display:flex;flex-wrap:wrap;gap:10px;}
+.hw-fs-seat{min-width:52px;height:52px;padding:0 10px;border-radius:12px;background:#fef3c7;border:2px solid #fde68a;display:flex;align-items:center;justify-content:center;font-size:1.7rem;font-weight:900;color:#92400e;}
 
 /* ── Seat size slider ── */
 .size-slider{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#e2e8f0;outline:none;cursor:pointer;}
@@ -671,11 +682,15 @@ background-size:28px 28px;min-height:500px;}
 
   <!-- 底部缺交狀態列 -->
   <div id="hwStatusBar" style="background:#fffbeb;border-top:1.5px solid #fde68a;padding:6px 14px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;min-height:34px;max-height:72px;overflow-y:auto;">
-    <span style="font-size:0.7rem;font-weight:700;color:#92400e;white-space:nowrap;padding-top:2px;">⭐ 缺交：</span>
+    <span id="hwBarLabel" style="font-size:0.7rem;font-weight:700;color:#92400e;white-space:nowrap;padding-top:2px;">⭐ 缺交：</span>
     <div id="hwStatusList" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
     <button class="hw-fs-toggle-btn" id="hwFsBtn" title="全螢幕投影顯示">⛶ 全螢幕</button>
+    <div id="hwFsTitleRow">
+      <span id="hwFsTitle">📋 缺交總覽</span>
+      <button id="hwFsCloseBtn">✕ 離開全螢幕</button>
+    </div>
+    <div id="hwFsGrid"></div>
   </div>
-  <button id="hwFsCloseBtn" style="display:none;">✕ 離開全螢幕</button>
 </div>
 
 <!-- ═══════════════ MODALS ═══════════════ -->
@@ -958,9 +973,10 @@ background-size:28px 28px;min-height:500px;}
 <!-- 缺交作業總覽 Modal -->
 <div class="modal-overlay" id="missingHwModal">
   <div class="modal-box" style="max-width:960px;width:92vw;max-height:90vh;display:flex;flex-direction:column;">
-    <div class="modal-title" style="flex-shrink:0;">
+    <div class="modal-title" style="flex-shrink:0;display:flex;align-items:center;">
       📋 缺交作業管理
       <span id="missingHwCount" style="font-size:0.75rem;font-weight:600;color:#f59e0b;margin-left:8px;"></span>
+      <button id="missingHwXBtn" style="margin-left:auto;background:none;border:none;font-size:1.3rem;color:#94a3b8;cursor:pointer;line-height:1;padding:2px 6px;" title="關閉">✕</button>
     </div>
 
     <!-- 批次新增區塊 -->
@@ -2670,6 +2686,7 @@ class ClassroomApp {
 
   _renderHwStatusBar() {
     const bar = document.getElementById('hwStatusList');
+    const fsGrid = document.getElementById('hwFsGrid');
     if (!bar) return;
     const hw = this.data.homeworkNotes || {};
     const students = this._students;
@@ -2684,35 +2701,56 @@ class ClassroomApp {
       });
     });
     bar.innerHTML = '';
+    if (fsGrid) fsGrid.innerHTML = '';
+
     if (!Object.keys(byHw).length) {
       bar.innerHTML = '<span style="font-size:0.7rem;color:#10b981;font-weight:600;">無缺交 ✓</span>';
+      if (fsGrid) fsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;font-size:1.6rem;color:#10b981;font-weight:800;">🎉 目前沒有缺交！</div>';
       return;
     }
-    Object.entries(byHw).sort(([a],[b])=>a.localeCompare(b,'zh')).forEach(([hwName, sts]) => {
+
+    const sortedHw = Object.entries(byHw).sort(([a],[b])=>a.localeCompare(b,'zh'));
+
+    // 底部小狀態列（一般模式）
+    sortedHw.forEach(([hwName, sts]) => {
       const chip = document.createElement('div');
-      chip.className = 'hw-chip-fs';
       chip.style.cssText = 'background:white;border:1.5px solid #fde68a;border-radius:8px;padding:2px 8px 2px 8px;display:flex;align-items:center;gap:5px;';
-      const sorted = sts.sort((a,b)=>a.seatNumber-b.seatNumber);
+      const sorted = sts.slice().sort((a,b)=>a.seatNumber-b.seatNumber);
       const seats = sorted.map(s=>`<span style="font-weight:700;color:${s.gender==='male'?'#1e40af':'#dc2626'};">${s.seatNumber}</span>`).join(' ');
-      chip.innerHTML = `<span class="hw-fs-name" style="font-size:0.68rem;font-weight:700;color:#92400e;border-right:1px solid #fde68a;padding-right:6px;margin-right:2px;">${hwName}</span><span class="hw-fs-seats" style="font-size:0.7rem;">${seats}</span>`;
+      chip.innerHTML = `<span style="font-size:0.68rem;font-weight:700;color:#92400e;border-right:1px solid #fde68a;padding-right:6px;margin-right:2px;">${hwName}</span><span style="font-size:0.7rem;">${seats}</span>`;
       bar.appendChild(chip);
     });
+
+    // 全螢幕投影版（左右兩欄卡片，只顯示座號，不顯示姓名以避免被其他同學認出）
+    if (fsGrid) {
+      sortedHw.forEach(([hwName, sts]) => {
+        const sorted = sts.slice().sort((a,b)=>a.seatNumber-b.seatNumber);
+        const card = document.createElement('div');
+        card.className = 'hw-fs-card';
+        const seatsHtml = sorted.map(s=>`<div class="hw-fs-seat" style="color:${s.gender==='male'?'#1e40af':'#dc2626'};">${s.seatNumber}</div>`).join('');
+        card.innerHTML = `
+          <div class="hw-fs-card-title">
+            <span>📌 ${hwName}</span>
+            <span class="hw-fs-card-count">${sorted.length} 人未交</span>
+          </div>
+          <div class="hw-fs-seat-wrap">${seatsHtml}</div>`;
+        fsGrid.appendChild(card);
+      });
+    }
   }
 
   _toggleHwFullscreen(on) {
     const bar = document.getElementById('hwStatusBar');
-    const closeBtn = document.getElementById('hwFsCloseBtn');
     if (!bar) return;
     if (on) {
       bar.classList.add('hw-fullscreen');
-      closeBtn.style.display = 'block';
       if (bar.requestFullscreen) bar.requestFullscreen().catch(()=>{});
     } else {
       bar.classList.remove('hw-fullscreen');
-      closeBtn.style.display = 'none';
       if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
     }
   }
+
 
   _fmtDateFromInput(isoDate) {
     // 'yyyy-mm-dd' -> 與既有資料一致的 'yyyy/m/d' 格式（zh-TW locale）
@@ -3380,6 +3418,7 @@ class ClassroomApp {
       if (e.key==='Escape' && document.getElementById('hwStatusBar')?.classList.contains('hw-fullscreen')) this._toggleHwFullscreen(false);
     });
     document.getElementById('closeMissingHwBtn')?.addEventListener('click',()=>this._hideModal('missingHwModal'));
+    document.getElementById('missingHwXBtn')?.addEventListener('click',()=>this._hideModal('missingHwModal'));
     // 批次新增
     document.getElementById('batchAddHwBtn')?.addEventListener('click',()=>{
       const hwName = document.getElementById('batchHwName').value.trim();
@@ -3491,10 +3530,13 @@ class ClassroomApp {
       });
     });
 
-    // Close modal on overlay click
+    // Close modal on overlay click（避免在輸入框拖曳選字時，放開滑鼠在外層被誤判為點擊而關閉）
     document.querySelectorAll('.modal-overlay').forEach(overlay=>{
-      overlay.addEventListener('click',e=>{
-        if(e.target===overlay)overlay.classList.remove('show');
+      let downOnOverlay = false;
+      overlay.addEventListener('mousedown', e => { downOnOverlay = (e.target === overlay); });
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay && downOnOverlay) overlay.classList.remove('show');
+        downOnOverlay = false;
       });
     });
   }
