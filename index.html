@@ -2746,22 +2746,27 @@ class ClassroomApp {
     const fsBtn = document.getElementById('hwFsBtn');
     if (!bar) return;
     if (on) {
-      // 記錄原本的 inline style，離開全螢幕時要還原（inline style 的權重高於 class，
+      // 記錄原本的 inline style，離開全螢幕時要完整還原（inline style 的權重高於 class，
       // 所以進入/離開全螢幕直接改 inline style，而不是只加 class，避免被原本的
-      // display/max-height 等 inline 設定蓋掉）
-      if (!bar.dataset.origStyle) bar.dataset.origStyle = bar.getAttribute('style') || '';
+      // display/max-height 等 inline 設定蓋掉；離開時也要「整串還原」而不是只清空
+      // 單一屬性，否則像 display:flex 這種只存在於 inline 裡的值，清空後會變成
+      // 瀏覽器預設的 display:block，導致版面跑掉）
+      if (!bar.dataset.origStyle)   bar.dataset.origStyle   = bar.getAttribute('style') || '';
+      if (list  && !list.dataset.origStyle)  list.dataset.origStyle  = list.getAttribute('style') || '';
+      if (label && !label.dataset.origStyle) label.dataset.origStyle = label.getAttribute('style') || '';
+      if (fsBtn && !fsBtn.dataset.origStyle) fsBtn.dataset.origStyle = fsBtn.getAttribute('style') || '';
       bar.classList.add('hw-fullscreen');
       bar.setAttribute('style', 'position:fixed;inset:0;z-index:9999;background:#fffbeb;padding:20px 32px 32px;display:flex;flex-direction:column;align-items:stretch;max-height:100vh;height:100vh;overflow-y:auto;box-sizing:border-box;');
-      if (list) list.style.display = 'none';
-      if (label) label.style.display = 'none';
-      if (fsBtn) fsBtn.style.display = 'none';
+      if (list)  list.setAttribute('style', 'display:none;');
+      if (label) label.setAttribute('style', 'display:none;');
+      if (fsBtn) fsBtn.setAttribute('style', 'display:none;');
       if (bar.requestFullscreen) bar.requestFullscreen().catch(()=>{});
     } else {
       bar.classList.remove('hw-fullscreen');
       bar.setAttribute('style', bar.dataset.origStyle || '');
-      if (list) list.style.display = '';
-      if (label) label.style.display = '';
-      if (fsBtn) fsBtn.style.display = '';
+      if (list)  list.setAttribute('style', list.dataset.origStyle || '');
+      if (label) label.setAttribute('style', label.dataset.origStyle || '');
+      if (fsBtn) fsBtn.setAttribute('style', fsBtn.dataset.origStyle || '');
       if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
     }
   }
