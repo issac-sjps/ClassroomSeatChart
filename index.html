@@ -413,6 +413,32 @@ background-size:28px 28px;min-height:500px;}
 /* ── Homework ── */
 .hw-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#fefce8;border:1px solid #fef08a;border-radius:7px;margin-bottom:5px;font-size:0.82rem;}
 
+/* ── Missing-HW group / chips (redesigned) ── */
+.hw-group{background:#fffefb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+.hw-group-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed #fde68a;}
+.hw-group-title>span:first-child{font-size:0.95rem;font-weight:800;color:#92400e;}
+.hw-group-date{font-size:0.72rem;font-weight:600;color:#b45309;background:#fef3c7;border-radius:6px;padding:2px 8px;margin-left:6px;}
+.hw-g-count{font-size:0.72rem;font-weight:700;color:#d97706;background:#fef3c7;border-radius:20px;padding:2px 10px;}
+.hw-chip-wrap{display:flex;flex-wrap:wrap;gap:8px;}
+.hw-chip{display:flex;align-items:center;gap:6px;background:white;border:1.5px solid #fde68a;border-radius:20px;padding:5px 6px 5px 12px;cursor:pointer;transition:all .12s;font-size:0.85rem;}
+.hw-chip:hover{border-color:#f59e0b;background:#fffbeb;transform:translateY(-1px);}
+.hw-chip.done{opacity:.45;pointer-events:none;}
+.hw-chip .hw-chip-seat{font-weight:800;color:#64748b;font-size:0.78rem;}
+.hw-chip .hw-chip-name{font-weight:700;}
+.hw-chip .hw-chip-check{width:20px;height:20px;border-radius:50%;background:#f0fdf4;color:#10b981;display:flex;align-items:center;justify-content:center;font-size:0.78rem;border:1.5px solid #a7f3d0;}
+.hw-chip:hover .hw-chip-check{background:#10b981;color:white;border-color:#10b981;}
+.hw-batch-date-row{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+
+/* ── Matrix fullscreen mode ── */
+#hwStatusBar.hw-fullscreen{position:fixed;inset:0;z-index:9999;background:#fffbeb;padding:28px 36px;flex-direction:column;align-items:stretch;max-height:100vh;overflow-y:auto;}
+#hwStatusBar.hw-fullscreen #hwStatusList{gap:18px;}
+#hwStatusBar.hw-fullscreen .hw-chip-fs{font-size:1.5rem;padding:10px 22px;border-radius:14px;border-width:2px;}
+#hwStatusBar.hw-fullscreen .hw-chip-fs .hw-fs-name{font-size:1.5rem;font-weight:800;}
+#hwStatusBar.hw-fullscreen .hw-chip-fs .hw-fs-seats span{font-size:1.7rem;padding:0 4px;}
+.hw-fs-toggle-btn{background:rgba(146,64,14,0.1);border:1.5px solid #fde68a;color:#92400e;border-radius:8px;padding:3px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;white-space:nowrap;}
+.hw-fs-toggle-btn:hover{background:rgba(146,64,14,0.2);}
+#hwFsCloseBtn{position:fixed;top:20px;right:24px;z-index:10000;background:#92400e;color:white;border:none;border-radius:10px;padding:8px 16px;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+
 /* ── Seat size slider ── */
 .size-slider{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#e2e8f0;outline:none;cursor:pointer;}
 .size-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#3b82f6;cursor:pointer;}
@@ -647,7 +673,9 @@ background-size:28px 28px;min-height:500px;}
   <div id="hwStatusBar" style="background:#fffbeb;border-top:1.5px solid #fde68a;padding:6px 14px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;min-height:34px;max-height:72px;overflow-y:auto;">
     <span style="font-size:0.7rem;font-weight:700;color:#92400e;white-space:nowrap;padding-top:2px;">⭐ 缺交：</span>
     <div id="hwStatusList" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
+    <button class="hw-fs-toggle-btn" id="hwFsBtn" title="全螢幕投影顯示">⛶ 全螢幕</button>
   </div>
+  <button id="hwFsCloseBtn" style="display:none;">✕ 離開全螢幕</button>
 </div>
 
 <!-- ═══════════════ MODALS ═══════════════ -->
@@ -929,7 +957,7 @@ background-size:28px 28px;min-height:500px;}
 <!-- Homework -->
 <!-- 缺交作業總覽 Modal -->
 <div class="modal-overlay" id="missingHwModal">
-  <div class="modal-box" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column;">
+  <div class="modal-box" style="max-width:960px;width:92vw;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-title" style="flex-shrink:0;">
       📋 缺交作業管理
       <span id="missingHwCount" style="font-size:0.75rem;font-weight:600;color:#f59e0b;margin-left:8px;"></span>
@@ -939,24 +967,39 @@ background-size:28px 28px;min-height:500px;}
     <div style="background:#fefce8;border:1.5px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:12px;flex-shrink:0;">
       <div style="font-size:0.75rem;font-weight:700;color:#92400e;margin-bottom:7px;">➕ 批次登記缺交</div>
       <div style="display:flex;gap:7px;margin-bottom:7px;">
-        <div style="flex:1;">
+        <div style="flex:1.2;">
           <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">作業名稱</label>
-          <input type="text" id="batchHwName" class="form-input" placeholder="例：數學p.25" style="width:100%;box-sizing:border-box;">
+          <input type="text" id="batchHwName" class="form-input" placeholder="例：數學p.25" style="width:100%;box-sizing:border-box;" list="hwNameHistory">
+          <datalist id="hwNameHistory"></datalist>
         </div>
-        <div style="flex:1;">
+        <div style="flex:0.8;">
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">登記日期</label>
+          <input type="date" id="batchHwDate" class="form-input" style="width:100%;box-sizing:border-box;">
+        </div>
+        <div style="flex:1.6;">
           <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">座號（空格或逗號分隔）</label>
           <input type="text" id="batchHwSeats" class="form-input" placeholder="例：1 3 5 或 1,3,5" style="width:100%;box-sizing:border-box;">
         </div>
       </div>
       <div style="display:flex;gap:7px;align-items:center;">
         <button class="btn btn-primary" id="batchAddHwBtn" style="padding:5px 16px;font-size:0.82rem;">登記</button>
-        <span id="batchHwResult" style="font-size:0.75rem;color:#10b981;"></span>
+        <span style="font-size:0.68rem;color:#94a3b8;">💡 同一份作業可分次登記，只要日期不同（或座號不同），不會被擋掉；同一天同座號重複登記會自動略過。</span>
+        <span id="batchHwResult" style="font-size:0.75rem;color:#10b981;margin-left:auto;white-space:nowrap;"></span>
       </div>
     </div>
 
     <!-- 缺交清單 -->
     <div id="missingHwBody" style="overflow-y:auto;flex:1;padding-right:4px;"></div>
     <button class="btn btn-gray" id="closeMissingHwBtn" style="width:100%;padding:0.5rem;margin-top:10px;flex-shrink:0;">關閉</button>
+  </div>
+
+  <!-- 確認繳交小視窗 -->
+  <div id="hwConfirmPop" style="display:none;position:fixed;z-index:10001;background:white;border:1.5px solid #fde68a;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.25);padding:14px 16px;min-width:220px;">
+    <div id="hwConfirmText" style="font-size:0.88rem;font-weight:700;color:#1e293b;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-green btn-sm" id="hwConfirmYes" style="flex:1;padding:6px 0;">✓ 確認已繳交</button>
+      <button class="btn btn-gray btn-sm" id="hwConfirmNo" style="flex:1;padding:6px 0;">取消</button>
+    </div>
   </div>
 </div>
 
@@ -2647,15 +2690,47 @@ class ClassroomApp {
     }
     Object.entries(byHw).sort(([a],[b])=>a.localeCompare(b,'zh')).forEach(([hwName, sts]) => {
       const chip = document.createElement('div');
+      chip.className = 'hw-chip-fs';
       chip.style.cssText = 'background:white;border:1.5px solid #fde68a;border-radius:8px;padding:2px 8px 2px 8px;display:flex;align-items:center;gap:5px;';
       const sorted = sts.sort((a,b)=>a.seatNumber-b.seatNumber);
       const seats = sorted.map(s=>`<span style="font-weight:700;color:${s.gender==='male'?'#1e40af':'#dc2626'};">${s.seatNumber}</span>`).join(' ');
-      chip.innerHTML = `<span style="font-size:0.68rem;font-weight:700;color:#92400e;border-right:1px solid #fde68a;padding-right:6px;margin-right:2px;">${hwName}</span><span style="font-size:0.7rem;">${seats}</span>`;
+      chip.innerHTML = `<span class="hw-fs-name" style="font-size:0.68rem;font-weight:700;color:#92400e;border-right:1px solid #fde68a;padding-right:6px;margin-right:2px;">${hwName}</span><span class="hw-fs-seats" style="font-size:0.7rem;">${seats}</span>`;
       bar.appendChild(chip);
     });
   }
 
+  _toggleHwFullscreen(on) {
+    const bar = document.getElementById('hwStatusBar');
+    const closeBtn = document.getElementById('hwFsCloseBtn');
+    if (!bar) return;
+    if (on) {
+      bar.classList.add('hw-fullscreen');
+      closeBtn.style.display = 'block';
+      if (bar.requestFullscreen) bar.requestFullscreen().catch(()=>{});
+    } else {
+      bar.classList.remove('hw-fullscreen');
+      closeBtn.style.display = 'none';
+      if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    }
+  }
+
+  _fmtDateFromInput(isoDate) {
+    // 'yyyy-mm-dd' -> 與既有資料一致的 'yyyy/m/d' 格式（zh-TW locale）
+    const [y,m,d] = isoDate.split('-').map(n=>parseInt(n,10));
+    return `${y}/${m}/${d}`;
+  }
+
   _showMissingHw() {
+    // 預設登記日期＝今天；並用既有作業名稱建立自動完成清單
+    const dateEl = document.getElementById('batchHwDate');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
+    const dl = document.getElementById('hwNameHistory');
+    if (dl) {
+      const names = new Set();
+      Object.values(this.data.homeworkNotes||{}).forEach(list=>list.forEach(h=>names.add(h.name)));
+      dl.innerHTML = [...names].sort((a,b)=>a.localeCompare(b,'zh')).map(n=>`<option value="${n}">`).join('');
+    }
+
     const hw = this.data.homeworkNotes || {};
     const students = this._students;
     // 收集所有缺交：{ hwName -> [{sid, st, date}] }
@@ -2686,59 +2761,82 @@ class ClassroomApp {
         const group = document.createElement('div');
         group.className = 'hw-group';
 
+        // 同一項作業可能有多個登記日期（分次登記/補登記），標題只在只有單一日期時顯示日期
+        const dates = [...new Set(entries.map(e=>e.date))];
+        const dateLabel = dates.length===1 ? `<span class="hw-group-date">缺交日 ${dates[0]}</span>` : '';
+
         const title = document.createElement('div');
         title.className = 'hw-group-title';
-        title.innerHTML = `<span>📌 ${hwName}</span><span class="hw-g-count">${entries.length} 人未交</span>`;
+        title.innerHTML = `<span>📌 ${hwName}${dateLabel}</span><span class="hw-g-count">${entries.length} 人未交</span>`;
         group.appendChild(title);
 
+        const chipWrap = document.createElement('div');
+        chipWrap.className = 'hw-chip-wrap';
+
         entries.forEach(({ sid, st, date, hwName: hn }) => {
-          const row = document.createElement('div');
-          row.className = 'hw-missing-row';
-          row.innerHTML = `
-            <div class="hw-student-info">
-              <span class="hw-seat-no">${st.seatNumber}</span>
-              <span style="font-weight:600;color:${st.gender==='male'?'#1e40af':'#991b1b'};">${st.name}</span>
-              <span class="hw-date">缺交日：${date}</span>
-            </div>`;
-          const btn = document.createElement('button');
-          btn.className = 'btn btn-green btn-sm';
-          btn.textContent = '✓ 已交';
-          btn.style.cssText = 'padding:3px 12px;font-size:0.75rem;white-space:nowrap;';
-          btn.onclick = () => {
-            // 從 homeworkNotes 移除這筆
-            const list = this.data.homeworkNotes[sid];
-            if (list) {
-              const idx = list.findIndex(h => h.name === hn);
-              if (idx !== -1) list.splice(idx, 1);
-              if (!list.length) delete this.data.homeworkNotes[sid];
-            }
-            this._scheduleSave();
-            this._renderAll();
-            // 移除這行並更新count
-            row.style.opacity = '0.4';
-            row.style.pointerEvents = 'none';
-            btn.textContent = '✓ 已收';
-            btn.style.background = '#d1fae5';
-            // 更新數量顯示
-            const remaining = group.querySelectorAll('.hw-missing-row:not([data-done])').length - 1;
-            const countBadge = title.querySelector('.hw-g-count');
-            if (remaining <= 0) {
-              group.style.opacity = '0.5';
-              if (countBadge) countBadge.textContent = '全部已收 ✓';
-              if (countBadge) countBadge.style.background = '#d1fae5';
-              if (countBadge) countBadge.style.color = '#059669';
-            } else {
-              if (countBadge) countBadge.textContent = `${remaining} 人未交`;
-            }
-            row.dataset.done = '1';
+          const chip = document.createElement('div');
+          chip.className = 'hw-chip';
+          const dateTag = dates.length>1 ? `<span style="font-size:0.68rem;color:#94a3b8;">${date}</span>` : '';
+          chip.innerHTML = `
+            <span class="hw-chip-seat" style="color:${st.gender==='male'?'#1e40af':'#dc2626'};">${st.seatNumber}</span>
+            <span class="hw-chip-name">${st.name}</span>${dateTag}
+            <span class="hw-chip-check">✓</span>`;
+          chip.onclick = (ev) => {
+            this._confirmHwDone(ev.currentTarget, `確認 ${st.name}（座號 ${st.seatNumber}）已繳交「${hn}」？`, () => {
+              const list = this.data.homeworkNotes[sid];
+              if (list) {
+                const idx = list.findIndex(h => h.name === hn && h.date === date);
+                if (idx !== -1) list.splice(idx, 1);
+                if (!list.length) delete this.data.homeworkNotes[sid];
+              }
+              this._scheduleSave();
+              this._renderAll();
+              chip.classList.add('done');
+              const remaining = chipWrap.querySelectorAll('.hw-chip:not(.done)').length;
+              const countBadge = title.querySelector('.hw-g-count');
+              if (remaining <= 0) {
+                group.style.opacity = '0.5';
+                if (countBadge) { countBadge.textContent = '全部已收 ✓'; countBadge.style.background='#d1fae5'; countBadge.style.color='#059669'; }
+              } else if (countBadge) {
+                countBadge.textContent = `${remaining} 人未交`;
+              }
+            });
           };
-          row.appendChild(btn);
-          group.appendChild(row);
+          chipWrap.appendChild(chip);
         });
+        group.appendChild(chipWrap);
         body.appendChild(group);
       });
     }
     this._showModal('missingHwModal');
+  }
+
+  // 點擊姓名/圖示 → 彈出小視窗要求確認，避免手滑誤觸
+  _confirmHwDone(anchorEl, text, onConfirm) {
+    const pop = document.getElementById('hwConfirmPop');
+    document.getElementById('hwConfirmText').textContent = text;
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.display = 'block';
+    let left = rect.left, top = rect.bottom + 6;
+    // 避免超出視窗右/下緣
+    setTimeout(()=>{
+      const pw = pop.offsetWidth, ph = pop.offsetHeight;
+      if (left + pw > window.innerWidth - 12) left = window.innerWidth - pw - 12;
+      if (top + ph > window.innerHeight - 12) top = rect.top - ph - 6;
+      pop.style.left = left + 'px';
+      pop.style.top = top + 'px';
+    },0);
+    const yesBtn = document.getElementById('hwConfirmYes');
+    const noBtn = document.getElementById('hwConfirmNo');
+    const cleanup = () => {
+      pop.style.display = 'none';
+      yesBtn.onclick = null; noBtn.onclick = null;
+      document.removeEventListener('mousedown', outsideClick, true);
+    };
+    const outsideClick = (e) => { if (!pop.contains(e.target) && e.target!==anchorEl) cleanup(); };
+    yesBtn.onclick = () => { onConfirm(); cleanup(); };
+    noBtn.onclick = cleanup;
+    setTimeout(()=>document.addEventListener('mousedown', outsideClick, true), 0);
   }
 
   _renderHwList() {
@@ -3272,6 +3370,15 @@ class ClassroomApp {
       if(this.currentSettingsSid) this._showModal('studentSettingsModal');
     });
     document.getElementById('showMissingHwBtn')?.addEventListener('click',()=>{this._track('missing_hw');this._showMissingHw();});
+    // 缺交矩陣全螢幕投影
+    document.getElementById('hwFsBtn')?.addEventListener('click',()=>this._toggleHwFullscreen(true));
+    document.getElementById('hwFsCloseBtn')?.addEventListener('click',()=>this._toggleHwFullscreen(false));
+    document.addEventListener('fullscreenchange',()=>{
+      if (!document.fullscreenElement) this._toggleHwFullscreen(false);
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key==='Escape' && document.getElementById('hwStatusBar')?.classList.contains('hw-fullscreen')) this._toggleHwFullscreen(false);
+    });
     document.getElementById('closeMissingHwBtn')?.addEventListener('click',()=>this._hideModal('missingHwModal'));
     // 批次新增
     document.getElementById('batchAddHwBtn')?.addEventListener('click',()=>{
@@ -3285,26 +3392,28 @@ class ClassroomApp {
       // 找對應學生
       const allStudents = Object.values(this._students);
       if (!this.data.homeworkNotes) this.data.homeworkNotes = {};
-      const today = new Date().toLocaleDateString('zh-TW');
-      let added = 0, notFound = [];
+      const dateInput = document.getElementById('batchHwDate').value; // yyyy-mm-dd
+      const regDate = dateInput ? this._fmtDateFromInput(dateInput) : new Date().toLocaleDateString('zh-TW');
+      let added = 0, skipped = 0, notFound = [];
       seatNums.forEach(sn => {
         const st = allStudents.find(s => s.seatNumber === sn);
         if (!st) { notFound.push(sn); return; }
         if (!this.data.homeworkNotes[st.id]) this.data.homeworkNotes[st.id] = [];
-        if (this.data.homeworkNotes[st.id].some(h => h.name === hwName)) return; // 已有
-        this.data.homeworkNotes[st.id].push({ name: hwName, date: today });
+        // 只擋「同一份作業、同一天」重複登記；不同天算是補登記/新一次缺交，允許新增
+        if (this.data.homeworkNotes[st.id].some(h => h.name === hwName && h.date === regDate)) { skipped++; return; }
+        this.data.homeworkNotes[st.id].push({ name: hwName, date: regDate });
         added++;
       });
       const resultEl = document.getElementById('batchHwResult');
       if (added > 0) {
-        resultEl.textContent = `✓ 已登記 ${added} 人${notFound.length?`，找不到座號：${notFound.join(', ')}`:''}`;
+        resultEl.textContent = `✓ 已登記 ${added} 人${skipped?`（${skipped} 人當天已登記過，略過）`:''}${notFound.length?`，找不到座號：${notFound.join(', ')}`:''}`;
         resultEl.style.color = '#10b981';
         document.getElementById('batchHwSeats').value = '';
         this._scheduleSave();
         this._renderAll();
         this._showMissingHw(); // 重新整理清單
       } else {
-        resultEl.textContent = notFound.length ? `找不到座號：${notFound.join(', ')}` : '這些學生已都有登記';
+        resultEl.textContent = notFound.length ? `找不到座號：${notFound.join(', ')}` : '這些學生當天都已登記過';
         resultEl.style.color = '#ef4444';
       }
     });
