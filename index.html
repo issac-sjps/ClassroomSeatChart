@@ -2684,6 +2684,26 @@ class ClassroomApp {
     });
   }
 
+  // 依作業名稱固定分配顏色（色弱友善色盤，8 色，用字串 hash 保證同名作業每次顏色都一樣）
+  _hwColorPalette() {
+    return [
+      { text:'#c2660b', bg:'#fdf1e0', border:'#f3c98a' }, // 橘
+      { text:'#0e7ea3', bg:'#e6f6fb', border:'#9fdcef' }, // 天藍
+      { text:'#00795a', bg:'#e2f7f0', border:'#8fe0c4' }, // 綠
+      { text:'#8a7b00', bg:'#fbf7d9', border:'#e6d976' }, // 黃橄欖
+      { text:'#005a8a', bg:'#e3f0fa', border:'#8fc2e6' }, // 深藍
+      { text:'#a34600', bg:'#fdece0', border:'#f0b088' }, // 朱紅
+      { text:'#a3407e', bg:'#fbeaf3', border:'#eab3d3' }, // 粉紫
+      { text:'#5a5a5a', bg:'#f0f0f0', border:'#cfcfcf' }, // 灰
+    ];
+  }
+  _hwColor(name) {
+    const palette = this._hwColorPalette();
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return palette[hash % palette.length];
+  }
+
   _renderHwStatusBar() {
     const bar = document.getElementById('hwStatusList');
     const fsGrid = document.getElementById('hwFsGrid');
@@ -2713,25 +2733,28 @@ class ClassroomApp {
 
     // 底部小狀態列（一般模式）
     sortedHw.forEach(([hwName, sts]) => {
+      const col = this._hwColor(hwName);
       const chip = document.createElement('div');
-      chip.style.cssText = 'background:white;border:1.5px solid #fde68a;border-radius:8px;padding:2px 8px 2px 8px;display:flex;align-items:center;gap:5px;';
+      chip.style.cssText = `background:${col.bg};border:1.5px solid ${col.border};border-radius:8px;padding:2px 8px 2px 8px;display:flex;align-items:center;gap:5px;`;
       const sorted = sts.slice().sort((a,b)=>a.seatNumber-b.seatNumber);
       const seats = sorted.map(s=>`<span style="font-weight:700;color:${s.gender==='male'?'#1e40af':'#dc2626'};">${s.seatNumber}</span>`).join(' ');
-      chip.innerHTML = `<span style="font-size:0.68rem;font-weight:700;color:#92400e;border-right:1px solid #fde68a;padding-right:6px;margin-right:2px;">${hwName}</span><span style="font-size:0.7rem;">${seats}</span>`;
+      chip.innerHTML = `<span style="font-size:0.68rem;font-weight:700;color:${col.text};border-right:1px solid ${col.border};padding-right:6px;margin-right:2px;">${hwName}</span><span style="font-size:0.7rem;">${seats}</span>`;
       bar.appendChild(chip);
     });
 
     // 全螢幕投影版（左右兩欄卡片，只顯示座號，不顯示姓名以避免被其他同學認出）
     if (fsGrid) {
       sortedHw.forEach(([hwName, sts]) => {
+        const col = this._hwColor(hwName);
         const sorted = sts.slice().sort((a,b)=>a.seatNumber-b.seatNumber);
         const card = document.createElement('div');
         card.className = 'hw-fs-card';
+        card.style.borderColor = col.border;
         const seatsHtml = sorted.map(s=>`<div class="hw-fs-seat" style="color:${s.gender==='male'?'#1e40af':'#dc2626'};">${s.seatNumber}</div>`).join('');
         card.innerHTML = `
-          <div class="hw-fs-card-title">
-            <span>📌 ${hwName}</span>
-            <span class="hw-fs-card-count">${sorted.length} 人未交</span>
+          <div class="hw-fs-card-title" style="border-bottom-color:${col.border};">
+            <span style="color:${col.text};">📌 ${hwName}</span>
+            <span class="hw-fs-card-count" style="background:${col.bg};color:${col.text};">${sorted.length} 人未交</span>
           </div>
           <div class="hw-fs-seat-wrap">${seatsHtml}</div>`;
         fsGrid.appendChild(card);
@@ -2816,16 +2839,19 @@ class ClassroomApp {
       countEl.textContent = `共 ${hwNames.length} 項作業，${totalStudents} 筆缺交`;
       hwNames.forEach(hwName => {
         const entries = byHw[hwName].sort((a,b) => a.st.seatNumber - b.st.seatNumber);
+        const col = this._hwColor(hwName);
         const group = document.createElement('div');
         group.className = 'hw-group';
+        group.style.borderColor = col.border;
 
         // 同一項作業可能有多個登記日期（分次登記/補登記），標題只在只有單一日期時顯示日期
         const dates = [...new Set(entries.map(e=>e.date))];
-        const dateLabel = dates.length===1 ? `<span class="hw-group-date">缺交日 ${dates[0]}</span>` : '';
+        const dateLabel = dates.length===1 ? `<span class="hw-group-date" style="background:${col.bg};color:${col.text};">缺交日 ${dates[0]}</span>` : '';
 
         const title = document.createElement('div');
         title.className = 'hw-group-title';
-        title.innerHTML = `<span>📌 ${hwName}${dateLabel}</span><span class="hw-g-count">${entries.length} 人未交</span>`;
+        title.style.borderBottomColor = col.border;
+        title.innerHTML = `<span style="color:${col.text};">📌 ${hwName}${dateLabel}</span><span class="hw-g-count" style="background:${col.bg};color:${col.text};">${entries.length} 人未交</span>`;
         group.appendChild(title);
 
         const chipWrap = document.createElement('div');
@@ -2834,6 +2860,7 @@ class ClassroomApp {
         entries.forEach(({ sid, st, date, hwName: hn }) => {
           const chip = document.createElement('div');
           chip.className = 'hw-chip';
+          chip.style.borderColor = col.border;
           const dateTag = dates.length>1 ? `<span style="font-size:0.68rem;color:#94a3b8;">${date}</span>` : '';
           chip.innerHTML = `
             <span class="hw-chip-seat" style="color:${st.gender==='male'?'#1e40af':'#dc2626'};">${st.seatNumber}</span>
