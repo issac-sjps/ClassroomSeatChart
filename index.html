@@ -227,10 +227,17 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f4f8;color:#1e293b;heig
 .aisle-line{width:2px;height:100%;background:linear-gradient(180deg,transparent,#bfdbfe 30%,#bfdbfe 70%,transparent);opacity:0.5;border-radius:1px;}
 
 /* ── Group layout ── */
-.group-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;}
 .group-box{background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:1rem;position:relative;}
 .group-lbl-btn{position:absolute;top:-12px;left:12px;background:white;border:1.5px solid #bfdbfe;color:#3b82f6;padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;}
 .group-lbl-btn:hover{background:#eff6ff;}
+.group-grid{display:flex;flex-direction:column;align-items:center;gap:1.5rem;}
+.group-grid-row{display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;}
+.group-total-ctrl{display:flex;align-items:center;gap:6px;background:white;border:1.5px solid #e2e8f0;border-radius:20px;padding:4px 10px;}
+.group-total-ctrl .gc-btn{width:22px;height:22px;font-size:0.9rem;}
+.group-align-ctrl{display:flex;align-items:center;gap:2px;background:white;border:1.5px solid #e2e8f0;border-radius:20px;padding:3px;}
+.group-align-btn{border:none;background:transparent;border-radius:16px;padding:4px 10px;font-size:0.72rem;font-weight:700;color:#94a3b8;cursor:pointer;}
+.group-align-btn.active{background:#eef2ff;color:#4338ca;}
+.group-toolbar{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:1.25rem;flex-wrap:wrap;}
 .group-count-ctrl{position:absolute;top:-12px;right:8px;display:flex;align-items:center;gap:3px;}
 .group-count-num{font-size:0.65rem;font-weight:700;color:#64748b;min-width:18px;text-align:center;}
 .gc-btn{width:18px;height:18px;border-radius:5px;border:1.5px solid #e2e8f0;background:white;color:#64748b;font-size:0.75rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;}
@@ -1651,77 +1658,159 @@ class ClassroomApp {
     }, 50);
   }
 
+  // 調整小組總數（3～8 組）。減少組數時，如果被刪掉的組別還有學生，會先跟老師確認，
+  // 該組學生的座位會被清空（回到左側學生名單，可重新拖曳安排），不會弄丟學生資料。
+  _changeGroupTotal(delta) {
+    const cls = this._cls;
+    const cur = Math.min(8, Math.max(3, cls.groupTotal ?? 6));
+    const next = cur + delta;
+    if (next < 3 || next > 8) return;
+    if (delta < 0) {
+      for (let g = next; g < cur; g++) {
+        const n = cls.groupSeatCounts?.[g] ?? 5;
+        let hasStudents = false;
+        for (let s = 0; s < 8; s++) { if (cls.groupSeats && cls.groupSeats[g*8+s]) { hasStudents = true; break; } }
+        if (hasStudents) {
+          const groupName = cls.groupNames?.[g] || `第${g+1}組`;
+          if (!confirm(`${groupName} 目前還有學生，確定要刪除這組嗎？\n該組學生會回到左側學生名單，可再重新拖曳安排座位。`)) return;
+        }
+        if (cls.groupSeats) { for (let s = 0; s < 8; s++) delete cls.groupSeats[g*8+s]; }
+      }
+    }
+    cls.groupTotal = next;
+    this._scheduleSave();
+    this._renderSeats();
+  }
+
   _renderGroup(container) {
     const sv = this.isStudentView;
     const sz = this.seatSize;
-    const gc = document.createElement('div'); gc.className='group-grid';
-    // 老師視角: [0,1,2上排][3,4,5下排]; 學生視角180度翻
-    const groupOrder = sv ? [5,4,3,2,1,0] : [0,1,2,3,4,5];
     const cls = this._cls;
     if (!cls.groupNames) cls.groupNames = {};
     if (!cls.groupSeatCounts) cls.groupSeatCounts = {};
 
-    groupOrder.forEach(g => {
-      const n = cls.groupSeatCounts[g] ?? 5;
-      const box = document.createElement('div'); box.className='group-box';
+    // 組數：預設 6 組（沿用舊資料，完全不影響原本就在用 6 組的老師），可調整範圍 3～8 組
+    const total = Math.min(8, Math.max(3, cls.groupTotal ?? 6));
+    const cols = 3;
+    const shortPos = cls.groupShortRowPos || 'bottom'; // 'top' | 'bottom'
 
-      // 組名標籤 + 雙擊改名
-      const groupName = cls.groupNames[g] || `第${g+1}組`;
-      const lbl = document.createElement('button'); lbl.className='group-lbl-btn';
-      lbl.textContent = groupName;
-      lbl.onclick = () => this._showGroupScoreModal(g+1);
-      lbl.ondblclick = (e) => {
-        e.stopPropagation();
-        const newName = prompt(`修改組名（目前：${groupName}）`, groupName);
-        if (newName !== null && newName.trim()) {
-          cls.groupNames[g] = newName.trim();
-          this._scheduleSave(); this._renderSeats();
-        }
-      };
-      box.appendChild(lbl);
+    // 老師視角排列順序：0..total-1，依每列 3 組切成好幾排
+    const idxs = Array.from({ length: total }, (_, i) => i);
+    let rows = [];
+    for (let i = 0; i < idxs.length; i += cols) rows.push(idxs.slice(i, i + cols));
+    const hasShortRow = (total % cols) !== 0 && rows.length > 1;
+    if (hasShortRow && shortPos === 'top') {
+      const last = rows.pop();
+      rows.unshift(last);
+    }
+    // 學生視角：整個排列 180 度翻轉（排的順序反過來，且每排內的組別順序也反過來）
+    if (sv) rows = rows.slice().reverse().map(r => r.slice().reverse());
 
-      // 右上角 +/- 控制（老師視角才顯示）
-      if (!sv) {
-        const ctrl = document.createElement('div'); ctrl.className='group-count-ctrl';
-        const subBtn = document.createElement('button'); subBtn.className='gc-btn gc-sub'; subBtn.textContent='−';
-        subBtn.title=`減少人數（目前${n}人）`;
-        subBtn.onclick = (e) => {
-          e.stopPropagation();
-          if (n <= 1) return;
-          // 移除最後一個座位的學生
-          const lastPos = g*8+(n-1);
-          if (cls.groupSeats && cls.groupSeats[lastPos]) delete cls.groupSeats[lastPos];
-          cls.groupSeatCounts[g] = n-1;
-          this._scheduleSave(); this._renderSeats();
+    // 工具列：組數 +/-，以及不整除時的「短排在上/在下」選擇（只有老師視角才顯示）
+    if (!sv) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'group-toolbar';
+
+      const totalCtrl = document.createElement('div');
+      totalCtrl.className = 'group-total-ctrl';
+      const subBtn = document.createElement('button'); subBtn.className = 'gc-btn gc-sub'; subBtn.textContent = '−';
+      subBtn.title = `減少組數（目前${total}組）`;
+      subBtn.onclick = () => this._changeGroupTotal(-1);
+      const numEl = document.createElement('span'); numEl.style.cssText = 'font-size:0.78rem;font-weight:700;color:#374151;';
+      numEl.textContent = `組數：${total}`;
+      const addBtn = document.createElement('button'); addBtn.className = 'gc-btn gc-add'; addBtn.textContent = '+';
+      addBtn.title = `增加組數（目前${total}組）`;
+      addBtn.onclick = () => this._changeGroupTotal(1);
+      totalCtrl.append(subBtn, numEl, addBtn);
+      toolbar.appendChild(totalCtrl);
+
+      // 只有在會產生不整除的短排時才顯示「短排在上/在下」，避免整除時（例如剛好6組）多一個沒意義的設定
+      if (hasShortRow) {
+        const alignCtrl = document.createElement('div');
+        alignCtrl.className = 'group-align-ctrl';
+        const mkAlignBtn = (val, label) => {
+          const b = document.createElement('button');
+          b.className = 'group-align-btn' + (shortPos === val ? ' active' : '');
+          b.textContent = label;
+          b.onclick = () => {
+            cls.groupShortRowPos = val;
+            this._scheduleSave(); this._renderSeats();
+          };
+          return b;
         };
-        const numEl = document.createElement('span'); numEl.className='group-count-num'; numEl.textContent=n+'人';
-        const addBtn = document.createElement('button'); addBtn.className='gc-btn gc-add'; addBtn.textContent='+';
-        addBtn.title=`增加人數（目前${n}人）`;
-        addBtn.onclick = (e) => {
-          e.stopPropagation();
-          if (n >= 8) return;
-          cls.groupSeatCounts[g] = n+1;
-          this._scheduleSave(); this._renderSeats();
-        };
-        // ⚙ 形狀設定
-        const cfgBtn = document.createElement('button'); cfgBtn.className='gc-btn gc-cfg'; cfgBtn.textContent='⚙';
-        cfgBtn.title='形狀與翻轉設定';
-        cfgBtn.onclick = (e) => { e.stopPropagation(); this._showShapePanel(g, 'group', cfgBtn); };
-        ctrl.appendChild(subBtn); ctrl.appendChild(numEl); ctrl.appendChild(addBtn); ctrl.appendChild(cfgBtn);
-        box.appendChild(ctrl);
+        alignCtrl.append(mkAlignBtn('top', '短排在上'), mkAlignBtn('bottom', '短排在下'));
+        toolbar.appendChild(alignCtrl);
       }
+      container.appendChild(toolbar);
+    }
 
-      // 座位排列
-      const inner = document.createElement('div'); inner.className='group-inner';
-      const cfg = (cls.groupShapes||{})[g];
-      const rows = this._applyGroupLayout(n, cfg, sv);
-      rows.forEach(rowSeats => {
-        const rDiv = document.createElement('div'); rDiv.className='group-row';
-        rowSeats.forEach(s => rDiv.appendChild(this._mkSeat(g*8+s, sz)));
-        inner.appendChild(rDiv);
+    const gc = document.createElement('div'); gc.className = 'group-grid';
+
+    rows.forEach(rowGroups => {
+      const rowDiv = document.createElement('div'); rowDiv.className = 'group-grid-row';
+      rowGroups.forEach(g => {
+        const n = cls.groupSeatCounts[g] ?? 5;
+        const box = document.createElement('div'); box.className='group-box';
+
+        // 組名標籤 + 雙擊改名
+        const groupName = cls.groupNames[g] || `第${g+1}組`;
+        const lbl = document.createElement('button'); lbl.className='group-lbl-btn';
+        lbl.textContent = groupName;
+        lbl.onclick = () => this._showGroupScoreModal(g+1);
+        lbl.ondblclick = (e) => {
+          e.stopPropagation();
+          const newName = prompt(`修改組名（目前：${groupName}）`, groupName);
+          if (newName !== null && newName.trim()) {
+            cls.groupNames[g] = newName.trim();
+            this._scheduleSave(); this._renderSeats();
+          }
+        };
+        box.appendChild(lbl);
+
+        // 右上角 +/- 控制（老師視角才顯示）
+        if (!sv) {
+          const ctrl = document.createElement('div'); ctrl.className='group-count-ctrl';
+          const subBtn = document.createElement('button'); subBtn.className='gc-btn gc-sub'; subBtn.textContent='−';
+          subBtn.title=`減少人數（目前${n}人）`;
+          subBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (n <= 1) return;
+            // 移除最後一個座位的學生
+            const lastPos = g*8+(n-1);
+            if (cls.groupSeats && cls.groupSeats[lastPos]) delete cls.groupSeats[lastPos];
+            cls.groupSeatCounts[g] = n-1;
+            this._scheduleSave(); this._renderSeats();
+          };
+          const numEl = document.createElement('span'); numEl.className='group-count-num'; numEl.textContent=n+'人';
+          const addBtn = document.createElement('button'); addBtn.className='gc-btn gc-add'; addBtn.textContent='+';
+          addBtn.title=`增加人數（目前${n}人）`;
+          addBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (n >= 8) return;
+            cls.groupSeatCounts[g] = n+1;
+            this._scheduleSave(); this._renderSeats();
+          };
+          // ⚙ 形狀設定
+          const cfgBtn = document.createElement('button'); cfgBtn.className='gc-btn gc-cfg'; cfgBtn.textContent='⚙';
+          cfgBtn.title='形狀與翻轉設定';
+          cfgBtn.onclick = (e) => { e.stopPropagation(); this._showShapePanel(g, 'group', cfgBtn); };
+          ctrl.appendChild(subBtn); ctrl.appendChild(numEl); ctrl.appendChild(addBtn); ctrl.appendChild(cfgBtn);
+          box.appendChild(ctrl);
+        }
+
+        // 座位排列
+        const inner = document.createElement('div'); inner.className='group-inner';
+        const cfg = (cls.groupShapes||{})[g];
+        const seatRows = this._applyGroupLayout(n, cfg, sv);
+        seatRows.forEach(rowSeats => {
+          const rDiv = document.createElement('div'); rDiv.className='group-row';
+          rowSeats.forEach(s => rDiv.appendChild(this._mkSeat(g*8+s, sz)));
+          inner.appendChild(rDiv);
+        });
+        box.appendChild(inner);
+        rowDiv.appendChild(box);
       });
-      box.appendChild(inner);
-      gc.appendChild(box);
+      gc.appendChild(rowDiv);
     });
     container.appendChild(gc);
   }
@@ -2629,7 +2718,9 @@ class ClassroomApp {
     const names = isScilab ? (cls.scilabGroupNames||{})  : (cls.groupNames||{});
     const titleEl = document.querySelector('#groupScoresModal .modal-title');
     if(titleEl) titleEl.textContent = isScilab ? '自然教室小組積分' : '班級小組積分';
-    const groups = Array.from({length:6},(_,i)=>({
+    // 一般小組模式的組數會跟著老師設定的組數走；自然教室固定 6 桌，維持不變
+    const groupCount = isScilab ? 6 : Math.min(8, Math.max(3, cls.groupTotal ?? 6));
+    const groups = Array.from({length:groupCount},(_,i)=>({
       g:i+1, name: names[i]||`第${i+1}組`, score: gs[i+1]||0
     })).sort((a,b)=>b.score-a.score);
     const list=document.getElementById('groupScoresList'); list.innerHTML='';
@@ -2871,7 +2962,7 @@ class ClassroomApp {
 
         // 同一項作業可能有多個登記日期（分次登記/補登記），標題只在只有單一日期時顯示日期
         const dates = [...new Set(entries.map(e=>e.date))];
-        const dateLabel = dates.length===1 ? `<span class="hw-group-date" style="background:${col.bg};color:${col.text};">缺交日 ${dates[0]}</span>` : '';
+        const dateLabel = dates.length===1 ? `<span class="hw-group-date" style="background:${col.bg};color:${col.text};">缺交日 ${this._shortDate(dates[0], true)}</span>` : '';
 
         const title = document.createElement('div');
         title.className = 'hw-group-title';
@@ -2886,7 +2977,7 @@ class ClassroomApp {
           const chip = document.createElement('div');
           chip.className = 'hw-chip';
           chip.style.borderColor = col.border;
-          const dateTag = dates.length>1 ? `<span style="font-size:0.68rem;color:#94a3b8;">${date}</span>` : '';
+          const dateTag = dates.length>1 ? `<span style="font-size:0.68rem;color:#94a3b8;">${this._shortDate(date)}</span>` : '';
           chip.innerHTML = `
             <span class="hw-chip-seat" style="color:${st.gender==='male'?'#1e40af':'#dc2626'};">${st.seatNumber}</span>
             <span class="hw-chip-name">${st.name}</span>${dateTag}
@@ -2980,9 +3071,10 @@ class ClassroomApp {
       const total = this.currentMode==='exam'?36:30;
       positions = Array.from({length:total},(_,i)=>i);
     } else if(this.currentMode==='group'||this.currentMode==='scilab'){
-      // g*8+s，每組人數從 seatCounts 取
+      // g*8+s，每組人數從 seatCounts 取；一般小組模式的組數要跟著老師設定的組數走，自然教室固定6桌
       const countsKey = this.currentMode==='scilab'?'scilabSeatCounts':'groupSeatCounts';
-      for(let g=0;g<6;g++){
+      const groupCount = this.currentMode==='scilab' ? 6 : Math.min(8, Math.max(3, cls.groupTotal ?? 6));
+      for(let g=0;g<groupCount;g++){
         const n = (cls[countsKey]||{})[g]??5;
         for(let s=0;s<n;s++) positions.push(g*8+s);
       }
