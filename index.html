@@ -1703,6 +1703,9 @@ class ClassroomApp {
       const last = rows.pop();
       rows.unshift(last);
     }
+    // 整排順序：老師可以選擇「1,2,3...在上」還是「1,2,3...在下」（跟短排設定各自獨立）
+    const rowOrder = cls.groupRowOrder || 'asc';
+    if (rowOrder === 'desc') rows = rows.slice().reverse();
     // 學生視角：整個排列 180 度翻轉（排的順序反過來，且每排內的組別順序也反過來）
     if (sv) rows = rows.slice().reverse().map(r => r.slice().reverse());
 
@@ -1723,6 +1726,24 @@ class ClassroomApp {
       addBtn.onclick = () => this._changeGroupTotal(1);
       totalCtrl.append(subBtn, numEl, addBtn);
       toolbar.appendChild(totalCtrl);
+
+      // 「1,2,3...在上／在下」整排順序，只有超過一排時才有意義
+      if (rows.length > 1) {
+        const orderCtrl = document.createElement('div');
+        orderCtrl.className = 'group-align-ctrl';
+        const mkOrderBtn = (val, label) => {
+          const b = document.createElement('button');
+          b.className = 'group-align-btn' + (rowOrder === val ? ' active' : '');
+          b.textContent = label;
+          b.onclick = () => {
+            cls.groupRowOrder = val;
+            this._scheduleSave(); this._renderSeats();
+          };
+          return b;
+        };
+        orderCtrl.append(mkOrderBtn('asc', '1,2,3在上'), mkOrderBtn('desc', '1,2,3在下'));
+        toolbar.appendChild(orderCtrl);
+      }
 
       // 只有在會產生不整除的短排時才顯示「短排在上/在下」，避免整除時（例如剛好6組）多一個沒意義的設定
       if (hasShortRow) {
