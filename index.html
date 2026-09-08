@@ -2707,6 +2707,19 @@ class ClassroomApp {
     return palette[hash % palette.length];
   }
 
+  // 全螢幕顯示用的精簡日期格式：拿掉年份省空間；withWeekday=true 時在後面加上「(週幾)」
+  _shortDate(dateStr, withWeekday = false) {
+    const parts = dateStr.split('/').map(n => parseInt(n, 10));
+    if (parts.length < 3 || parts.some(isNaN)) return dateStr;
+    const [y, m, d] = parts;
+    let s = `${m}/${d}`;
+    if (withWeekday) {
+      const wd = ['日','一','二','三','四','五','六'][new Date(y, m - 1, d).getDay()];
+      s += `(${wd})`;
+    }
+    return s;
+  }
+
   _renderHwStatusBar() {
     const bar = document.getElementById('hwStatusList');
     const fsGrid = document.getElementById('hwFsGrid');
@@ -2756,11 +2769,11 @@ class ClassroomApp {
         card.style.borderColor = col.border;
         card.style.borderLeftColor = col.text;
         // 只有單一登記日期時，直接標在標題旁；多個日期時，分別標在各座號下方，避免混淆
-        const dateBadge = dates.length===1 ? `<span class="hw-fs-date-badge" style="background:${col.bg};color:${col.text};">缺交日 ${dates[0]}</span>` : '';
+        const dateBadge = dates.length===1 ? `<span class="hw-fs-date-badge" style="background:${col.bg};color:${col.text};">缺交日 ${this._shortDate(dates[0], true)}</span>` : '';
         const seatsHtml = sorted.map(e=>`
           <div class="hw-fs-seat-item">
             <div class="hw-fs-seat" style="color:${e.st.gender==='male'?'#1e40af':'#dc2626'};">${e.st.seatNumber}</div>
-            ${dates.length>1 ? `<div class="hw-fs-seat-date">${e.date}</div>` : ''}
+            ${dates.length>1 ? `<div class="hw-fs-seat-date">${this._shortDate(e.date)}</div>` : ''}
           </div>`).join('');
         card.innerHTML = `
           <div class="hw-fs-card-title" style="border-bottom-color:${col.border};">
